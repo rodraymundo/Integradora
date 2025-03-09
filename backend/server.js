@@ -2,9 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql');
 const cors = require('cors');
-const bcrypt = require('bcryptjs'); // Para hashear las contraseñas
+const bcrypt = require('bcryptjs');
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -29,19 +29,15 @@ db.connect(err => {
 app.post('/login', (req, res) => {
   const { correo, contrasena } = req.body;
 
-  // Verificar si el correo existe en la base de datos
   const sql = 'SELECT * FROM usuario WHERE correo = ?';
   db.query(sql, [correo], (err, results) => {
     if (err) return res.status(500).send(err);
 
-    // Si no hay resultados, correo no existe
     if (results.length === 0) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    const user = results[0]; // Tomamos el primer usuario encontrado
-
-    // Comparar la contraseña recibida con la almacenada en la base de datos
+    const user = results[0];
     bcrypt.compare(contrasena, user.contrasena, (err, isMatch) => {
       if (err) return res.status(500).send(err);
 
@@ -49,8 +45,7 @@ app.post('/login', (req, res) => {
         return res.status(401).json({ message: 'Contraseña incorrecta' });
       }
 
-      // Si la contraseña es correcta, enviamos los datos del usuario (sin contraseña)
-      const { contrasena, ...userWithoutPassword } = user; // Quitamos la contraseña de la respuesta
+      const { contrasena, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     });
   });
@@ -68,7 +63,6 @@ app.get('/usuario', (req, res) => {
 app.post('/usuario', (req, res) => {
   const { nombre, apaterno, amaterno, correo, contrasena, tipo_usuario } = req.body;
 
-  // Hashear la contraseña antes de guardarla
   bcrypt.hash(contrasena, 10, (err, hashedPassword) => {
     if (err) return res.status(500).send(err);
 
@@ -99,33 +93,179 @@ app.delete('/usuario/:id', (req, res) => {
   });
 });
 
+// **Obtener solo vehículos activos (estatus = 1)**
+app.get('/vehiculo/active', (req, res) => {
+  const sql = 'SELECT * FROM vehiculo WHERE estatus = 1';
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).send(err);
+    res.json(results);
+  });
+});
+
+// **Crear un vehículo**
+app.post('/vehiculo', (req, res) => {
+  const {
+    matricula,
+    marca,
+    modelo,
+    capacidad_peso_max,
+    capacidad_volumen,
+    estado,
+    tipo_vehiculo,
+    tipo_carga,
+    id_usuario,
+  } = req.body;
+
+  // Validar campos requeridos
+  if (
+    !matricula ||
+    !marca ||
+    !modelo ||
+    !capacidad_peso_max ||
+    !capacidad_volumen ||
+    !estado ||
+    !tipo_vehiculo ||
+    !tipo_carga ||
+    !id_usuario
+  ) {
+    return res.status(400).json({ message: "Faltan campos requeridos" });
+  }
+
+  // Establecer peso_disponible igual a capacidad_peso_max al crear el vehículo
+  const peso_disponible = capacidad_peso_max;
+  const folio_iot = null;
+  const estatus = 1; // Nuevo vehículo activo por defecto
+
+  const sql = `
+    INSERT INTO vehiculo (
+      matricula, marca, modelo, capacidad_peso_max, capacidad_volumen, 
+      estado, tipo_vehiculo, tipo_carga, id_usuario, peso_disponible, folio_iot, estatus
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+  db.query(
+    sql,
+    [
+      matricula,
+      marca,
+      modelo,
+      capacidad_peso_max,
+      capacidad_volumen,
+      estado,
+      tipo_vehiculo,
+      tipo_carga,
+      id_usuario,
+      peso_disponible,
+      folio_iot,
+      estatus,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Error al insertar vehículo:", err);
+        return res.status(500).json({ message: "Error al insertar vehículo", error: err.message });
+      }
+      res.json({ message: "Vehículo añadido", matricula });
+    }
+  );
+});
+
+// **Actualizar un vehículo**
+app.put('/vehiculo/:matricula', (req, res) => {
+  const {
+    marca,
+    modelo,
+    capacidad_peso_max,
+    capacidad_volumen,
+    estado,
+    tipo_vehiculo,
+    tipo_carga,
+    id_usuario,
+  } = req.body;
+
+  // Validar campos requeridos
+  if (
+    !marca ||
+    !modelo ||
+    !capacidad_peso_max ||
+    !capacidad_volumen ||
+    !estado ||
+    !tipo_vehiculo ||
+    !tipo_carga ||
+    !id_usuario
+  ) {
+    return res.status(400).json({ message: "Faltan campos requeridos" });
+  }
+
+  const sql = `
+    UPDATE vehiculo 
+    SET marca = ?, modelo = ?, capacidad_peso_max = ?, capacidad_volumen = ?, 
+        estado = ?, tipo_vehiculo = ?, tipo_carga = ?, id_usuario = ?
+    WHERE matricula = ?
+  `;
+  db.query(
+    sql,
+    [
+      marca,
+      modelo,
+      capacidad_peso_max,
+      capacidad_volumen,
+      estado,
+      tipo_vehiculo,
+      tipo_carga,
+      id_usuario,
+      req.params.matricula,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Error al actualizar vehículo:", err);
+        return res.status(500).json({ message: "Error al actualizar vehículo", error: err.message });
+      }
+      res.json({ message: "Vehículo actualizado" });
+    }
+  );
+});
+
+// **Eliminar vehículo (baja lógica)**
+app.put('/vehiculo/:matricula/delete', (req, res) => {
+  const sql = `
+    UPDATE vehiculo 
+    SET estatus = 0, estado = 'fuera de servicio' 
+    WHERE matricula = ?
+  `;
+  db.query(sql, [req.params.matricula], (err, result) => {
+    if (err) {
+      console.error("Error al eliminar vehículo:", err);
+      return res.status(500).json({ message: "Error al eliminar vehículo", error: err.message });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Vehículo no encontrado" });
+    }
+    res.json({ message: "Vehículo dado de baja" });
+  });
+});
+
 app.listen(PORT, () => console.log(`Servidor corriendo en http://localhost:${PORT}`));
 
-//GOOGLE
+// GOOGLE
 const { OAuth2Client } = require('google-auth-library');
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID); // Usa tu Client ID
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Ruta para el login con Google
 app.post('/google-login', async (req, res) => {
   const { tokenId } = req.body;
 
-  // Verificar el token con Google
   try {
     const ticket = await client.verifyIdToken({
       idToken: tokenId,
-      audience: process.env.GOOGLE_CLIENT_ID, // Asegúrate de usar el mismo Client ID
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
 
     const payload = ticket.getPayload();
     const { email, given_name, family_name } = payload;
 
-    // Verificar si el usuario existe en la base de datos
     const sql = 'SELECT * FROM usuario WHERE correo = ?';
     db.query(sql, [email], (err, results) => {
       if (err) return res.status(500).send(err);
 
       if (results.length === 0) {
-        // Si el usuario no existe, lo creamos
         const insertSQL =
           'INSERT INTO usuario (nombre, apaterno, correo, tipo_usuario) VALUES (?, ?, ?, ?)';
         db.query(insertSQL, [given_name, family_name, email, 'conductor'], (err, result) => {
@@ -139,7 +279,6 @@ app.post('/google-login', async (req, res) => {
           res.json({ success: true, user: newUser });
         });
       } else {
-        // Si el usuario existe, lo autenticamos
         const user = results[0];
         res.json({ success: true, user });
       }
