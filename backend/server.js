@@ -51,9 +51,10 @@ app.post('/login', (req, res) => {
   });
 });
 
-// **Obtener usuario (para pruebas o administración)**
+// **Obtener todos los usuarios**
 app.get('/usuario', (req, res) => {
-  db.query('SELECT id_usuario, nombre, apaterno, amaterno, correo, tipo_usuario FROM usuario', (err, results) => {
+  const sql = 'SELECT id_usuario, nombre, apaterno, amaterno, correo, celular, tipo_usuario, created_at, updated_at FROM usuario';
+  db.query(sql, (err, results) => {
     if (err) return res.status(500).send(err);
     res.json(results);
   });
@@ -61,26 +62,46 @@ app.get('/usuario', (req, res) => {
 
 // **Crear Usuario**
 app.post('/usuario', (req, res) => {
-  const { nombre, apaterno, amaterno, correo, contrasena, tipo_usuario } = req.body;
+  const { nombre, apaterno, amaterno, correo, contrasena, celular, tipo_usuario } = req.body;
+
+  // Validar campos requeridos
+  if (!nombre || !apaterno || !correo || !contrasena || !tipo_usuario) {
+    return res.status(400).json({ message: "Faltan campos requeridos" });
+  }
 
   bcrypt.hash(contrasena, 10, (err, hashedPassword) => {
     if (err) return res.status(500).send(err);
 
-    const sql = 'INSERT INTO usuario (nombre, apaterno, amaterno, correo, contrasena, tipo_usuario) VALUES (?, ?, ?, ?, ?, ?)';
-    db.query(sql, [nombre, apaterno, amaterno, correo, hashedPassword, tipo_usuario], (err, result) => {
-      if (err) return res.status(500).send(err);
-      res.json({ id_usuario: result.insertId, nombre, apaterno, amaterno, correo, tipo_usuario });
+    const sql = 'INSERT INTO usuario (nombre, apaterno, amaterno, correo, contrasena, celular, tipo_usuario) VALUES (?, ?, ?, ?, ?, ?, ?)';
+    db.query(sql, [nombre, apaterno, amaterno || null, correo, hashedPassword, celular || null, tipo_usuario], (err, result) => {
+      if (err) {
+        console.error("Error al insertar usuario:", err);
+        return res.status(500).json({ message: "Error al insertar usuario", error: err.message });
+      }
+      res.json({ id_usuario: result.insertId, nombre, apaterno, amaterno, correo, celular, tipo_usuario });
     });
   });
 });
 
 // **Actualizar Usuario**
 app.put('/usuario/:id', (req, res) => {
-  const { nombre, apaterno, amaterno, correo, tipo_usuario } = req.body;
-  const sql = 'UPDATE usuario SET nombre=?, apaterno=?, amaterno=?, correo=?, tipo_usuario=? WHERE id_usuario=?';
-  db.query(sql, [nombre, apaterno, amaterno, correo, tipo_usuario, req.params.id], (err, result) => {
-    if (err) return res.status(500).send(err);
-    res.json({ message: 'Usuario actualizado' });
+  const { nombre, apaterno, amaterno, correo, celular, tipo_usuario } = req.body;
+
+  // Validar campos requeridos
+  if (!nombre || !apaterno || !correo || !tipo_usuario) {
+    return res.status(400).json({ message: "Faltan campos requeridos" });
+  }
+
+  const sql = 'UPDATE usuario SET nombre=?, apaterno=?, amaterno=?, correo=?, celular=?, tipo_usuario=? WHERE id_usuario=?';
+  db.query(sql, [nombre, apaterno, amaterno || null, correo, celular || null, tipo_usuario, req.params.id], (err, result) => {
+    if (err) {
+      console.error("Error al actualizar usuario:", err);
+      return res.status(500).json({ message: "Error al actualizar usuario", error: err.message });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+    res.json({ message: "Usuario actualizado" });
   });
 });
 
@@ -88,8 +109,14 @@ app.put('/usuario/:id', (req, res) => {
 app.delete('/usuario/:id', (req, res) => {
   const sql = 'DELETE FROM usuario WHERE id_usuario=?';
   db.query(sql, [req.params.id], (err, result) => {
-    if (err) return res.status(500).send(err);
-    res.json({ message: 'Usuario eliminado' });
+    if (err) {
+      console.error("Error al eliminar usuario:", err);
+      return res.status(500).json({ message: "Error al eliminar usuario", error: err.message });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+    res.json({ message: "Usuario eliminado" });
   });
 });
 

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Header from "../Header";
 import "bootstrap/dist/css/bootstrap.min.css";
+// Importaciones de FontAwesome
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faUser } from "@fortawesome/free-solid-svg-icons";
 
 function Perfil({ setIsLoggedIn }) {
   const handleLogout = () => {
@@ -8,19 +11,19 @@ function Perfil({ setIsLoggedIn }) {
     setIsLoggedIn(false);
   };
 
-  // Estado para almacenar la información del usuario (simulado desde localStorage o API)
+  // Estado para almacenar la información del usuario
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Simulamos obtener la información del usuario desde localStorage o una API
+    // Obtener la información del usuario desde localStorage
     const session = localStorage.getItem("userSession");
     if (session) {
       const userData = JSON.parse(session);
       setUser({
-        nombre: userData.nombre || "Samuel Palacios", // Ajusta según tu estructura de datos
-        celular: userData.celular || "4421246543",
-        correo: userData.correo || "samuel@gmail.com",
-        rol: userData.rol || "administrador",
+        nombreCompleto: `${userData.nombre} ${userData.apaterno} ${userData.amaterno || ""}`.trim(),
+        correo: userData.correo,
+        tipoUsuario: userData.tipo_usuario,
+        celular: userData.celular || "No especificado", // Valor por defecto si no existe
       });
     }
   }, []);
@@ -35,26 +38,36 @@ function Perfil({ setIsLoggedIn }) {
           <div className="row justify-content-center">
             <div className="col-lg-6">
               <div className="border rounded p-4 text-center" style={{ backgroundColor: "#fff" }}>
-                <img
-                  src="https://via.placeholder.com/150" // Reemplaza con la URL de una imagen real o usa una API
-                  alt="Foto de perfil"
+               {/* Icono de FontAwesome en lugar de la imagen */}
+               <div
                   style={{
                     width: "150px",
                     height: "150px",
                     borderRadius: "100%",
-                    marginBottom: "20px",
+                    backgroundColor: "#e9ecef", // Fondo gris claro
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 20px auto", // Centrado y margen inferior
                   }}
-                />
-                <h3>Perfil</h3>
+                >
+                  <FontAwesomeIcon
+                    icon={faUser}
+                    style={{
+                      fontSize: "80px", // Tamaño del icono
+                      color: "#6c757d", // Color gris oscuro
+                    }}
+                  />
+                </div>
                 {user ? (
                   <div>
-                    <p><strong>Nombre:</strong> {user.nombre}</p>
-                    <p><strong>Celular:</strong> {user.celular}</p>
+                    <h3>{user.nombreCompleto}</h3>
                     <p><strong>Correo:</strong> {user.correo}</p>
-                    <p><strong>Rol:</strong> {user.rol}</p>
+                    <p><strong>Rol:</strong> {user.tipoUsuario}</p>
+                    <p><strong>Celular:</strong> {user.celular}</p>
                   </div>
                 ) : (
-                  <p>Cargando información del perfil...</p>
+                  <p>No se encontró información del perfil. Por favor, inicia sesión nuevamente.</p>
                 )}
               </div>
             </div>
