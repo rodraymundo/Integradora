@@ -5,13 +5,12 @@ import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
 import Modal from "react-bootstrap/Modal";
 import Button from "react-bootstrap/Button";
 import Form from "react-bootstrap/Form";
-// Importaciones de FontAwesome
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faTools, // Icono para "mantenimiento"
-  faTruck, // Icono para "disponible"
-  faBox, // Icono para "en ruta"
-  faBan, // Icono para "fuera de servicio"
+  faTools,
+  faTruck,
+  faBox,
+  faBan,
 } from "@fortawesome/free-solid-svg-icons";
 
 function Vehiculos({ setIsLoggedIn }) {
@@ -19,9 +18,9 @@ function Vehiculos({ setIsLoggedIn }) {
     localStorage.removeItem("userSession");
     setIsLoggedIn(false);
   };
-
+  
   const [vehicles, setVehicles] = useState([]);
-  const [users, setUsers] = useState([]); // Nuevo estado para los usuarios
+  const [users, setUsers] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -38,8 +37,8 @@ function Vehiculos({ setIsLoggedIn }) {
     id_usuario: "",
   });
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [address, setAddress] = useState("");
 
-  // Cargar vehículos y usuarios desde la API
   useEffect(() => {
     fetchVehicles();
     fetchUsers();
@@ -49,13 +48,18 @@ function Vehiculos({ setIsLoggedIn }) {
     try {
       const response = await fetch("http://localhost:5000/vehiculo/active");
       const data = await response.json();
-      const vehiclesWithPositions = data.map((vehicle, index) => ({
-        ...vehicle,
-        position: {
-          lat: 20.6539 + index * 0.002,
-          lng: -100.4351 + index * 0.002,
-        },
-      }));
+      const vehiclesWithPositions = data.map((vehicle, index) => {
+        // Generar variaciones aleatorias alrededor de un punto central
+        const randomLatOffset = (Math.random() - 0.5) * 0.02; // Variación entre -0.01 y 0.01
+        const randomLngOffset = (Math.random() - 0.5) * 0.02; // Variación entre -0.01 y 0.01
+        return {
+          ...vehicle,
+          position: {
+            lat: 20.6539 + randomLatOffset,
+            lng: -100.4351 + randomLngOffset,
+          },
+        };
+      });
       setVehicles(vehiclesWithPositions);
     } catch (error) {
       console.error("Error al cargar vehículos:", error);
@@ -72,7 +76,6 @@ function Vehiculos({ setIsLoggedIn }) {
     }
   };
 
-  // Configuración del mapa
   const mapContainerStyle = {
     width: "100%",
     height: "480px",
@@ -87,7 +90,6 @@ function Vehiculos({ setIsLoggedIn }) {
     setMapLoaded(true);
   }, []);
 
-  // Manejo del modal de detalles
   const handleShowDetails = (vehicle) => {
     setSelectedVehicle(vehicle);
     setShowDetailsModal(true);
@@ -98,7 +100,6 @@ function Vehiculos({ setIsLoggedIn }) {
     setSelectedVehicle(null);
   };
 
-  // Manejo del modal de formulario (Añadir/Editar)
   const handleShowForm = (vehicle = null) => {
     if (vehicle) {
       setIsEditing(true);
@@ -188,7 +189,6 @@ function Vehiculos({ setIsLoggedIn }) {
     }
   };
 
-  // Función para eliminar vehículo (baja lógica)
   const handleDeleteVehicle = async (matricula) => {
     if (window.confirm("¿Estás seguro de dar de baja este vehículo?")) {
       try {
@@ -211,13 +211,11 @@ function Vehiculos({ setIsLoggedIn }) {
     }
   };
 
-  // Obtener el nombre del conductor basado en id_usuario
   const getUserName = (id_usuario) => {
     const user = users.find((u) => u.id_usuario === id_usuario);
     return user ? `${user.nombre} ${user.apaterno} ${user.amaterno}` : "Desconocido";
   };
 
-  // Iconos para el estado usando FontAwesome
   const getStatusIcon = (estado) => {
     switch (estado) {
       case "mantenimiento":
@@ -233,15 +231,30 @@ function Vehiculos({ setIsLoggedIn }) {
     }
   };
 
+  const getAddress = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyC7IIRa4kxYY3Yiq1PD64XHDt1fl_f_kDc`
+      );
+      const data = await response.json();
+      if (data.results && data.results.length > 0) {
+        setAddress(data.results[0].formatted_address);
+      } else {
+        setAddress("Dirección no disponible");
+      }
+    } catch (error) {
+      console.error("Error al obtener la dirección:", error);
+      setAddress("Error al obtener la dirección");
+    }
+  };
+
   return (
     <div style={{ fontFamily: "'Montserrat', sans-serif", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Header onLogout={handleLogout} />
 
-      {/* Contenido principal */}
       <div style={{ padding: "20px", flex: 1, display: "flex", flexDirection: "column" }}>
         <div className="container-fluid" style={{ flex: 1 }}>
           <div className="row g-3" style={{ flex: 1 }}>
-            {/* Lista de vehículos con scroll interno */}
             <div className="col-lg-4" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
               <div
                 className="border rounded p-3"
@@ -292,7 +305,6 @@ function Vehiculos({ setIsLoggedIn }) {
               </div>
             </div>
 
-            {/* Mapa */}
             <div className="col-lg-8">
               <div className="border rounded p-3 h-100">
                 <h3>Mapa de Vehículos</h3>
@@ -315,6 +327,7 @@ function Vehiculos({ setIsLoggedIn }) {
                             url: "https://maps.google.com/mapfiles/kml/shapes/truck.png",
                             scaledSize: new window.google.maps.Size(50, 50),
                           }}
+                          onMouseOver={() => getAddress(vehicle.position.lat, vehicle.position.lng)}
                         />
                       ))}
                     </GoogleMap>
@@ -322,13 +335,13 @@ function Vehiculos({ setIsLoggedIn }) {
                     <p>Cargando mapa...</p>
                   )}
                 </LoadScript>
+                {address && <p>Ubicación: {address}</p>}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Modal de Detalles */}
       <Modal show={showDetailsModal} onHide={handleCloseDetails}>
         <Modal.Header closeButton>
           <Modal.Title>Detalles del vehículo</Modal.Title>
@@ -371,7 +384,6 @@ function Vehiculos({ setIsLoggedIn }) {
         </Modal.Footer>
       </Modal>
 
-      {/* Modal de Añadir/Editar */}
       <Modal show={showFormModal} onHide={handleCloseForm}>
         <Modal.Header closeButton>
           <Modal.Title>{isEditing ? "Editar vehículo" : "Añadir vehículo"}</Modal.Title>

@@ -49,7 +49,8 @@ function Alertas({ setIsLoggedIn }) {
   // Configuración del mapa
   const mapContainerStyle = {
     width: "100%",
-    height: "500px",
+    height: "550px", // Restaurado a 500px
+    position: "relative", // Necesario para posicionar la leyenda dentro del mapa
   };
 
   const center = {
@@ -65,7 +66,7 @@ function Alertas({ setIsLoggedIn }) {
   return (
     <div style={{ fontFamily: "'Montserrat', sans-serif", minHeight: "100vh" }}>
       <Header onLogout={handleLogout} />
-      
+
       {/* Contenido principal */}
       <div style={{ padding: "20px" }}>
         <div className="container-fluid">
@@ -83,10 +84,14 @@ function Alertas({ setIsLoggedIn }) {
                   >
                     <div>
                       <p>
-                        <strong>{alerta.marca} {alerta.modelo}</strong><br />
-                        <strong>Conductor:</strong> {alerta.conductor}<br />
-                        <strong>Ubicación:</strong> {alerta.ubicacion}<br />
-                        <strong>Coordenadas:</strong> {`lat: ${alerta.coordenadas.lat}, lng: ${alerta.coordenadas.lng}`}
+                        <strong>{alerta.marca} {alerta.modelo}</strong>
+                        <br />
+                        <strong>Conductor:</strong> {alerta.conductor}
+                        <br />
+                        <strong>Ubicación:</strong> {alerta.ubicacion}
+                        <br />
+                        <strong>Coordenadas:</strong>{" "}
+                        {`lat: ${alerta.coordenadas.lat}, lng: ${alerta.coordenadas.lng}`}
                       </p>
                     </div>
                     <button className="btn btn-dark">Ver más</button>
@@ -95,7 +100,7 @@ function Alertas({ setIsLoggedIn }) {
               </div>
             </div>
 
-            {/* Mapa */}
+            {/* Mapa con leyenda superpuesta */}
             <div className="col-lg-8">
               <div className="border rounded p-3 h-100">
                 <h3>Mapa de Alertas</h3>
@@ -104,39 +109,122 @@ function Alertas({ setIsLoggedIn }) {
                   onLoad={onLoad}
                 >
                   {mapLoaded && (
-                    <GoogleMap
-                      mapContainerStyle={mapContainerStyle}
-                      center={center}
-                      zoom={10}
-                    >
-                      {alertas.map((alerta) => (
-                        <Marker
-                          key={alerta.id}
-                          position={alerta.coordenadas}
-                          icon={{
-                            url: alerta.icon,
-                            scaledSize: new window.google.maps.Size(32, 32),
-                          }}
-                          title={`${alerta.marca} ${alerta.modelo} - ${alerta.tipo}`}
-                        />
-                      ))}
-                    </GoogleMap>
+                    <div style={{ position: "relative" }}>
+                      <GoogleMap
+                        mapContainerStyle={mapContainerStyle}
+                        center={center}
+                        zoom={10}
+                      >
+                        {alertas.map((alerta) => (
+                          <Marker
+                            key={alerta.id}
+                            position={alerta.coordenadas}
+                            icon={{
+                              url: alerta.icon,
+                              scaledSize: new window.google.maps.Size(32, 32),
+                            }}
+                            title={`${alerta.marca} ${alerta.modelo} - ${alerta.tipo}`}
+                          />
+                        ))}
+                      </GoogleMap>
+                      {/* Leyenda superpuesta dentro del mapa */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "13px",
+                          left: "230px",
+                          borderRadius: "6px",
+                          padding: "6px",
+                          zIndex: 1000, // Asegurarse de que esté por encima del mapa
+                        }}
+                      >
+                        <div
+                          className="d-flex"
+                          style={{ gap: "8px", flexWrap: "wrap" }}
+                        >
+                          <div
+                            style={{
+                              backgroundColor: "#FFD700", // Dorado para Tráfico
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold",
+                              fontSize: "12px",
+                              color: "#000000", // Texto negro
+                              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            Tráfico
+                          </div>
+                          <div
+                            style={{
+                              backgroundColor: "#8B4513", // Marrón para Falla mecánica
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold",
+                              fontSize: "12px",
+                              color: "#ffffff", // Texto blanco
+                              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            Falla mecánica
+                          </div>
+                          <div
+                            style={{
+                              backgroundColor: "#FF0000", // Rojo para Accidente
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold",
+                              fontSize: "12px",
+                              color: "#ffffff", // Texto blanco
+                              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            Accidente
+                          </div>
+                          <div
+                            style={{
+                              backgroundColor: "#FF4500", // Naranja rojizo para Emergencia
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold",
+                              fontSize: "12px",
+                              color: "#ffffff", // Texto blanco
+                              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            Emergencia
+                          </div>
+                          <div
+                            style={{
+                              backgroundColor: "#800080", // Púrpura para Descanso activo
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold",
+                              fontSize: "12px",
+                              color: "#ffffff", // Texto blanco
+                              boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "3px",
+                            }}
+                          >
+                            Descanso activo
+                            <span style={{ fontSize: "10px" }}>💤</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </LoadScript>
                 {!mapLoaded && <p>Cargando mapa...</p>}
-              </div>
-            </div>
-          </div>
-
-          {/* Leyenda de tipos de alertas */}
-          <div className="row mt-3">
-            <div className="col-12">
-              <div className="d-flex justify-content-around">
-                <div style={{ backgroundColor: "#ffff00", padding: "5px 10px", borderRadius: "5px" }}>Tráfico</div>
-                <div style={{ backgroundColor: "#8B4513", padding: "5px 10px", borderRadius: "5px" }}>Falla mecánica</div>
-                <div style={{ backgroundColor: "#FF0000", padding: "5px 10px", borderRadius: "5px" }}>Accidente</div>
-                <div style={{ backgroundColor: "#FF4500", padding: "5px 10px", borderRadius: "5px" }}>Emergencia</div>
-                <div style={{ backgroundColor: "#800080", padding: "5px 10px", borderRadius: "5px" }}>Descanso activo <span style={{ fontSize: "12px" }}>💤</span></div>
               </div>
             </div>
           </div>
