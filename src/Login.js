@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import Swal from "sweetalert2";
 
 function Login({ setIsLoggedIn }) {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -22,9 +23,15 @@ function Login({ setIsLoggedIn }) {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
     const existingSession = localStorage.getItem("userSession");
     if (existingSession) {
-      alert("Ya existe una sesión activa. Por favor, cierra la otra sesión antes de continuar.");
+      Swal.fire({
+        icon: "warning",
+        title: "Sesión Activa",
+        text: "Ya existe una sesión activa. Por favor, cierra la otra sesión antes de continuar.",
+        confirmButtonText: "Aceptar",
+      });
       return;
     }
 
@@ -47,11 +54,24 @@ function Login({ setIsLoggedIn }) {
 
       const data = await response.json();
       if (response.ok) {
-        console.log("Login tradicional exitoso:", data);
-        localStorage.setItem("userSession", JSON.stringify(data));
-        setIsLoggedIn(true);
-        navigate("/");
+        Swal.fire({
+          icon: "success",
+          title: "¡Bienvenido!",
+          text: "Inicio de sesión exitoso.",
+          timer: 2000, // Aumentamos el tiempo para que sea más visible
+          showConfirmButton: false,
+        }).then(() => {
+          localStorage.setItem("userSession", JSON.stringify(data));
+          setIsLoggedIn(true);
+          navigate("/");
+        });
       } else {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: data.message || "Usuario y/o contraseña incorrectos.",
+          confirmButtonText: "Intentar de nuevo",
+        });
         setErrors({
           username: "",
           password: data.message || "Usuario y/o contraseña incorrectos.",
@@ -59,6 +79,12 @@ function Login({ setIsLoggedIn }) {
       }
     } catch (error) {
       console.error("Error de red:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Error al intentar iniciar sesión. Por favor, verifica tu conexión.",
+        confirmButtonText: "Aceptar",
+      });
       setErrors({ username: "", password: "Error al intentar iniciar sesión." });
     }
   };
@@ -73,32 +99,55 @@ function Login({ setIsLoggedIn }) {
     console.log("location.search:", location.search);
     const urlParams = new URLSearchParams(location.search);
     const user = urlParams.get("user");
+    const error = urlParams.get("error");
+
+    if (error) {
+      console.log("Error recibido desde Google:", decodeURIComponent(error));
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: decodeURIComponent(error),
+        confirmButtonText: "Aceptar",
+      });
+      navigate("/login", { replace: true });
+      return;
+    }
 
     if (user && !localStorage.getItem("userSession")) {
       try {
         const userData = JSON.parse(decodeURIComponent(user));
         console.log("Usuario recibido desde Google:", userData);
-        localStorage.setItem("userSession", JSON.stringify(userData));
-        setIsLoggedIn(true);
-        console.log("isLoggedIn establecido a true, redirigiendo a /");
-
-        // Redirigir y limpiar el parámetro de la URL
-        navigate("/", { replace: true });
+        Swal.fire({
+          icon: "success",
+          title: "¡Bienvenido!",
+          text: "Inicio de sesión con Google exitoso.",
+          timer: 2000, // Aumentamos el tiempo para que sea más visible
+          showConfirmButton: false,
+        }).then(() => {
+          localStorage.setItem("userSession", JSON.stringify(userData));
+          setIsLoggedIn(true);
+          console.log("isLoggedIn establecido a true, redirigiendo a /");
+          navigate("/", { replace: true });
+        });
       } catch (error) {
         console.error("Error al parsear datos de usuario:", error);
-        navigate("/login");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Error al procesar los datos de Google. Por favor, intenta de nuevo.",
+          confirmButtonText: "Aceptar",
+        });
+        navigate("/login", { replace: true });
       }
     } else {
-      console.log("No se encontró parámetro 'user' en la URL o ya existe una sesión");
+      console.log("No se encontró parámetro 'user' ni 'error' en la URL o ya existe una sesión");
     }
   }, [setIsLoggedIn, navigate, location.search]);
 
   return (
     <div style={{ maxWidth: "350px", margin: "0 auto", padding: "20px", textAlign: "center" }}>
-      {/* Formulario para inicio de sesión con usuario/contraseña */}
       <form onSubmit={handleLogin}>
         <img src="logo_ruta_segura.png" alt="Logo de la empresa" style={{ width: "320px", marginTop: "80px", marginBottom: "30px" }} />
-        <h2 style={{ fontSize: "45px", color: "black", marginBottom: "20px" }}>Bienvenido</h2>
         <div style={{ marginBottom: "15px" }}>
           <input
             type="text"
@@ -135,14 +184,13 @@ function Login({ setIsLoggedIn }) {
             fontSize: "16px",
             transition: "background-color 0.3s ease",
           }}
-          onMouseOver={(e) => (e.target.style.backgroundColor = "#0056b3")} // Efecto hover
-          onMouseOut={(e) => (e.target.style.backgroundColor = "#007bff")} // Restaurar color original
+          onMouseOver={(e) => (e.target.style.backgroundColor = "#0056b3")}
+          onMouseOut={(e) => (e.target.style.backgroundColor = "#007bff")}
         >
           Ingresar
         </button>
       </form>
 
-      {/* Botón de Google fuera del formulario */}
       <div style={{ marginTop: "20px" }}>
         <button
           onClick={handleGoogleLogin}
@@ -153,23 +201,23 @@ function Login({ setIsLoggedIn }) {
             width: "100%",
             padding: "12px",
             backgroundColor: "#ffffff",
-            color: "#4285f4", // Color azul de Google
-            border: "1px solid #dadce0", // Borde gris claro
+            color: "#4285f4",
+            border: "1px solid #dadce0",
             borderRadius: "8px",
             cursor: "pointer",
             fontWeight: "bold",
             fontSize: "16px",
-            boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)", // Sombra suave
+            boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
             transition: "box-shadow 0.3s ease, background-color 0.3s ease",
-            gap: "10px", // Espacio entre el ícono y el texto
+            gap: "10px",
           }}
           onMouseOver={(e) => {
-            e.target.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.2)"; // Sombra más pronunciada al hover
-            e.target.style.backgroundColor = "#f8f9fa"; // Fondo ligeramente gris al hover
+            e.target.style.boxShadow = "0 4px 8px rgba(0, 0, 0, 0.2)";
+            e.target.style.backgroundColor = "#f8f9fa";
           }}
           onMouseOut={(e) => {
-            e.target.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)"; // Restaurar sombra
-            e.target.style.backgroundColor = "#ffffff"; // Restaurar fondo blanco
+            e.target.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
+            e.target.style.backgroundColor = "#ffffff";
           }}
         >
           <svg

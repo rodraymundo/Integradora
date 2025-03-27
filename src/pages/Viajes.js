@@ -2,16 +2,13 @@ import React, { useState, useEffect } from "react";
 import Header from "../Header";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
+import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"; // Asegúrate de tener useJsApiLoader si no lo estás usando ya
+import { format } from "date-fns";
+import { Modal, Button } from "react-bootstrap";
 
-function Viajes({ setIsLoggedIn }) {
-  const handleLogout = () => {
-    localStorage.removeItem("userSession");
-    setIsLoggedIn(false);
-  };
-
+function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const [cargas, setCargas] = useState([]);
   const [viajes, setViajes] = useState([]);
-  const [vehiculos, setVehiculos] = useState([]);
   const [selectedCarga, setSelectedCarga] = useState(null);
   const [selectedViaje, setSelectedViaje] = useState(null);
   const [newCarga, setNewCarga] = useState({
@@ -28,90 +25,98 @@ function Viajes({ setIsLoggedIn }) {
     destino_latitud: "",
     destino_longitud: "",
   });
+  const [origenInput, setOrigenInput] = useState("");
+  const [destinoInput, setDestinoInput] = useState("");
+  const [origenSelected, setOrigenSelected] = useState(false);
+  const [destinoSelected, setDestinoSelected] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [origenAddress, setOrigenAddress] = useState(""); // Nuevo estado para la dirección de origen
+  const [destinoAddress, setDestinoAddress] = useState(""); // Nuevo estado para la dirección de destino
 
-  const tiposCarga = ["carga seca", "refrigerada", "plataforma", "cama baja"];
+  const tiposCarga = ["Carga seca", "Refrigerada", "Plataforma", "Cama baja"];
 
   useEffect(() => {
-    fetchCargas();
-    fetchViajes();
-    fetchVehiculos();
-  }, [viajes]); // Añadimos viajes como dependencia para actualizar cargas cuando cambien
+    fetchCargasSinViaje();
+    fetchViajesActivos();
+  }, []);
 
-  const fetchCargas = async () => {
+  const fetchCargasSinViaje = async () => {
     try {
-      const response = await fetch("http://localhost:5000/carga", {
-        method: "GET",
+      const response = await fetch("http://localhost:5000/carga/sin-viaje", {
         credentials: "include",
       });
-      if (response.ok) {
-        const allCargas = await response.json();
-        const assignedCargaIds = new Set(viajes.flatMap(viaje => viaje.cargas.map(c => c.id_carga)));
-        const pendingCargas = allCargas.filter((carga) => !carga.fecha_salida && !assignedCargaIds.has(carga.id_carga));
-        setCargas(pendingCargas);
-      } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: await response.text(),
-        });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error al obtener cargas: ${response.status} - ${errorText}`);
       }
+      const data = await response.json();
+      setCargas(data);
     } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al obtener cargas",
-      });
+      console.error("Error fetching cargas:", error);
+      Swal.fire("Error", "No se pudieron cargar las cargas pendientes: " + error.message, "error");
     }
   };
 
-  const fetchViajes = async () => {
+  const formatLocalDate = (dateString) => {
+    const date = new Date(dateString);
+    date.setHours(date.getHours() - 6);
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    const hours = String(date.getHours() % 12 || 12).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const ampm = date.getHours() >= 12 ? "PM" : "AM";
+    return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+  };
+
+  const fetchViajesActivos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/viaje", {
-        method: "GET",
+      const response = await fetch("http://localhost:5000/vista_viajes_activos", {
         credentials: "include",
       });
-      if (response.ok) {
-        const data = await response.json();
-        setViajes(data);
-      } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: await response.text(),
-        });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error al obtener viajes: ${response.status} - ${errorText}`);
       }
+      const data = await response.json();
+      const viajesAgrupados = data.reduce((acc, curr) => {
+        const existingViaje = acc.find((v) => v.id_viaje === curr.id_viaje);
+        const carga = {
+          id_carga: curr.id_carga,
+          cliente: curr.cliente,
+          peso: curr.peso,
+          volumen: curr.volumen,
+          tipo_carga: curr.tipo_carga,
+        };
+        if (existingViaje) {
+          existingViaje.cargas.push(carga);
+        } else {
+          acc.push({
+            id_viaje: curr.id_viaje,
+            id_vehiculo: curr.id_vehiculo,
+            estado: curr.estado,
+            origen_latitud: curr.origen_latitud,
+            origen_longitud: curr.origen_longitud,
+            destino_latitud: curr.destino_latitud,
+            destino_longitud: curr.destino_longitud,
+            fecha_entrega: curr.fecha_entrega,
+            fecha_salida: curr.fecha_salida,
+            conductor: `${curr.conductor_nombre || ""} ${curr.conductor_apaterno || ""} ${curr.conductor_amaterno || ""}`.trim() || "Sin conductor",
+            cargas: [carga],
+          });
+        }
+        return acc;
+      }, []);
+      setViajes(viajesAgrupados);
     } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al obtener viajes",
-      });
+      console.error("Error fetching viajes:", error);
+      Swal.fire("Error", "No se pudieron cargar los viajes activos: " + error.message, "error");
     }
   };
 
-  const fetchVehiculos = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/vehiculo/active", {
-        method: "GET",
-        credentials: "include",
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setVehiculos(data);
-      } else {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: await response.text(),
-        });
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al obtener vehículos",
-      });
-    }
+  const handleLogout = () => {
+    localStorage.removeItem("userSession");
+    setIsLoggedIn(false);
   };
 
   const handleCreateCarga = async (e) => {
@@ -120,198 +125,117 @@ function Viajes({ setIsLoggedIn }) {
       const response = await fetch("http://localhost:5000/carga", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify(newCarga),
-      });
-      if (response.ok) {
-        fetchCargas();
-        setNewCarga({
-          cliente: "",
-          peso: "",
-          volumen: "",
-          descripcion: "",
-          tipo_carga: "",
-          fecha_entrega: "",
-        });
-        Swal.fire({
-          icon: "success",
-          title: "Éxito",
-          text: "Carga creada exitosamente.",
-        });
-      } else {
-        const errorText = await response.text();
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: `Error al crear carga: ${errorText}`,
-        });
-      }
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al crear carga",
-      });
-    }
-  };
-
-  const handleAddCargaToViaje = async (idViaje, idCarga) => {
-    try {
-      const response = await fetch(`http://localhost:5000/viaje/${idViaje}/add-carga`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          id_carga: idCarga,
-          origen_latitud: newViaje.origen_latitud,
-          origen_longitud: newViaje.origen_longitud,
-          destino_latitud: newViaje.destino_latitud,
-          destino_longitud: newViaje.destino_longitud,
-        }),
       });
-      if (response.ok) {
-        fetchViajes();
-        fetchCargas();
-        setSelectedCarga(null);
-        Swal.fire({
-          icon: "success",
-          title: "Éxito",
-          text: "Carga agregada al viaje con éxito.",
-        });
-      } else {
-        const errorText = await response.text();
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: `Error al agregar carga al viaje: ${errorText}`,
-        });
-      }
+      if (!response.ok) throw new Error("Error al crear carga");
+      await response.json();
+      Swal.fire("Éxito", "Carga creada correctamente", "success");
+      setNewCarga({
+        cliente: "",
+        peso: "",
+        volumen: "",
+        descripcion: "",
+        tipo_carga: "",
+        fecha_entrega: "",
+      });
+      fetchCargasSinViaje();
     } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al agregar carga al viaje",
-      });
+      console.error("Error creando carga:", error);
+      Swal.fire("Error", "No se pudo crear la carga", "error");
     }
   };
 
   const handleAsignarViaje = async (e) => {
     e.preventDefault();
-    if (!selectedCarga) {
-      Swal.fire({
-        icon: "warning",
-        title: "Advertencia",
-        text: "Selecciona una carga primero",
-      });
+    if (!selectedCarga || !origenSelected || !destinoSelected) {
+      Swal.fire("Error", "Por favor completa todos los campos requeridos", "error");
       return;
     }
-  
-    // Encontrar todos los viajes compatibles
-    const compatibleViajes = viajes.filter((viaje) => {
-      const totalPeso = viaje.cargas.reduce((sum, carga) => sum + parseFloat(carga.peso || 0), 0) + parseFloat(selectedCarga.peso);
-      const totalVolumen = viaje.cargas.reduce((sum, carga) => sum + parseFloat(carga.volumen || 0), 0) + parseFloat(selectedCarga.volumen);
-      const vehicle = vehiculos.find((v) => v.matricula === viaje.id_vehiculo);
-      const isSameDay = new Date(viaje.fecha_entrega).toDateString() === new Date(selectedCarga.fecha_entrega).toDateString();
-      const isCloseOrigin = Math.abs(viaje.origen_latitud - parseFloat(newViaje.origen_latitud)) < 0.1 &&
-                           Math.abs(viaje.origen_longitud - parseFloat(newViaje.origen_longitud)) < 0.1;
-      const isCloseDestination = Math.abs(viaje.destino_latitud - parseFloat(newViaje.destino_latitud)) < 0.1 &&
-                                Math.abs(viaje.destino_longitud - parseFloat(newViaje.destino_longitud)) < 0.1;
-  
-      return (
-        vehicle &&
-        vehicle.capacidad_peso_max >= totalPeso &&
-        vehicle.peso_disponible >= totalPeso &&
-        vehicle.capacidad_volumen >= totalVolumen &&
-        vehicle.tipo_carga === selectedCarga.tipo_carga &&
-        isSameDay &&
-        isCloseOrigin &&
-        isCloseDestination &&
-        viaje.estado === "asignado"
-      );
-    });
-  
-    if (compatibleViajes.length > 0) {
-      const options = compatibleViajes.map((viaje) => ({
-        value: viaje.id_viaje,
-        text: `Viaje ${viaje.id_viaje} con vehículo ${viaje.id_vehiculo}`,
-      }));
-      Swal.fire({
-        icon: "info",
-        title: "Viajes Compatibles Encontrados",
-        html: `Selecciona un viaje para unir la carga:<br><select id="compatibleViaje" class="swal2-select">${options.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join('')}</select>`,
-        showCancelButton: true,
-        confirmButtonText: "Asignar",
-        cancelButtonText: "Crear nuevo viaje",
-        didOpen: () => {
-          const select = Swal.getPopup().querySelector("#compatibleViaje");
-          select.focus();
-        },
-        preConfirm: () => {
-          return Swal.getPopup().querySelector("#compatibleViaje").value;
-        },
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const selectedViajeId = result.value;
-          console.log("Botón 'Asignar' presionado, agregando carga al viaje:", selectedViajeId);
-          handleAddCargaToViaje(selectedViajeId, selectedCarga.id_carga);
-        } else {
-          console.log("Botón 'Crear nuevo viaje' presionado");
-          createNewViaje();
-        }
-      });
-      return;
-    }
-  
-    console.log("No se encontraron viajes compatibles, creando uno nuevo");
-    createNewViaje();
-  };
-
-  const createNewViaje = async () => {
+    const data = {
+      id_carga: selectedCarga.id_carga,
+      origen_latitud: newViaje.origen_latitud,
+      origen_longitud: newViaje.origen_longitud,
+      destino_latitud: newViaje.destino_latitud,
+      destino_longitud: newViaje.destino_longitud,
+      fecha_entrega: selectedCarga.fecha_entrega,
+    };
     try {
-      const response = await fetch("http://localhost:5000/viaje", {
+      const response = await fetch("http://localhost:5000/viaje/asignar-carga", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
         credentials: "include",
-        body: JSON.stringify({ ...newViaje, id_carga: selectedCarga.id_carga }),
       });
-      if (response.ok) {
-        const result = await response.json();
-        console.log("Respuesta del servidor:", result); // Log para depuración
-        const assignedVehicle = result.id_vehiculo || "Desconocido";
-        fetchViajes();
-        setNewViaje({
-          origen_latitud: "",
-          origen_longitud: "",
-          destino_latitud: "",
-          destino_longitud: "",
-        });
-        setSelectedCarga(null);
-        Swal.fire({
-          icon: "success",
-          title: "Éxito",
-          text: `Viaje asignado con éxito. Vehículo asignado: ${assignedVehicle}`,
-        });
-      } else {
-        const errorText = await response.text();
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: `Error al asignar viaje: ${errorText}`,
-        });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(`Error al asignar viaje: ${errorData.message} - ${errorData.error}`);
       }
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "Error de red al asignar viaje",
+      await response.json();
+      Swal.fire("Éxito", "Carga asignada a viaje correctamente", "success");
+      setSelectedCarga(null);
+      setOrigenInput("");
+      setDestinoInput("");
+      setOrigenSelected(false);
+      setDestinoSelected(false);
+      setNewViaje({
+        origen_latitud: "",
+        origen_longitud: "",
+        destino_latitud: "",
+        destino_longitud: "",
       });
+      fetchCargasSinViaje();
+      fetchViajesActivos();
+    } catch (error) {
+      console.error("Error asignando viaje:", error);
+      Swal.fire("Error", "No se pudo asignar la carga al viaje: " + error.message, "error");
     }
   };
+
+  // Función para convertir coordenadas a dirección usando la API de Google Maps
+  const getAddressFromCoords = (lat, lng) => {
+    return new Promise((resolve, reject) => {
+      const geocoder = new window.google.maps.Geocoder();
+      const latlng = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      geocoder.geocode({ location: latlng }, (results, status) => {
+        if (status === "OK" && results[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          reject("No se pudo obtener la dirección");
+        }
+      });
+    });
+  };
+
+  const handleShowModal = async (viaje) => {
+    setSelectedViaje(viaje);
+    try {
+      const origenAddr = await getAddressFromCoords(viaje.origen_latitud, viaje.origen_longitud);
+      const destinoAddr = await getAddressFromCoords(viaje.destino_latitud, viaje.destino_longitud);
+      setOrigenAddress(origenAddr);
+      setDestinoAddress(destinoAddr);
+    } catch (error) {
+      console.error("Error al obtener direcciones:", error);
+      setOrigenAddress("No disponible");
+      setDestinoAddress("No disponible");
+    }
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setSelectedViaje(null);
+    setOrigenAddress("");
+    setDestinoAddress("");
+  };
+
+  if (!isGoogleMapsLoaded) {
+    return <div>Cargando Google Maps...</div>;
+  }
 
   return (
     <div style={{ fontFamily: "'Montserrat', sans-serif", minHeight: "100vh" }}>
       <Header onLogout={handleLogout} />
-
       <div style={{ padding: "20px" }}>
         <div className="container-fluid">
           <div className="row g-3">
@@ -331,10 +255,14 @@ function Viajes({ setIsLoggedIn }) {
                     >
                       <div>
                         <p>
-                          <strong>Cliente:</strong> {carga.cliente}<br />
-                          <strong>Peso:</strong> {carga.peso} kg<br />
-                          <strong>Tipo Carga:</strong> {carga.tipo_carga}<br />
-                          <strong>Entrega:</strong> {new Date(carga.fecha_entrega).toLocaleString()}
+                          <strong>Cliente:</strong> {carga.cliente}
+                          <br />
+                          <strong>Peso:</strong> {carga.peso} kg
+                          <br />
+                          <strong>Tipo Carga:</strong> {carga.tipo_carga}
+                          <br />
+                          <strong>Entrega:</strong>{" "}
+                          {format(new Date(carga.fecha_entrega), "dd/MM/yyyy hh:mm a")}
                         </p>
                       </div>
                       <button className="btn btn-dark">Seleccionar</button>
@@ -348,7 +276,9 @@ function Viajes({ setIsLoggedIn }) {
                     className="form-control mb-2"
                     placeholder="Cliente"
                     value={newCarga.cliente}
-                    onChange={(e) => setNewCarga({ ...newCarga, cliente: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, cliente: e.target.value })
+                    }
                     required
                   />
                   <input
@@ -357,7 +287,9 @@ function Viajes({ setIsLoggedIn }) {
                     className="form-control mb-2"
                     placeholder="Peso (kg)"
                     value={newCarga.peso}
-                    onChange={(e) => setNewCarga({ ...newCarga, peso: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, peso: e.target.value })
+                    }
                     required
                   />
                   <input
@@ -366,19 +298,25 @@ function Viajes({ setIsLoggedIn }) {
                     className="form-control mb-2"
                     placeholder="Volumen (m³)"
                     value={newCarga.volumen}
-                    onChange={(e) => setNewCarga({ ...newCarga, volumen: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, volumen: e.target.value })
+                    }
                     required
                   />
                   <textarea
                     className="form-control mb-2"
                     placeholder="Descripción"
                     value={newCarga.descripcion}
-                    onChange={(e) => setNewCarga({ ...newCarga, descripcion: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, descripcion: e.target.value })
+                    }
                   />
                   <select
                     className="form-control mb-2"
                     value={newCarga.tipo_carga}
-                    onChange={(e) => setNewCarga({ ...newCarga, tipo_carga: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, tipo_carga: e.target.value })
+                    }
                     required
                   >
                     <option value="">Selecciona el tipo de carga</option>
@@ -392,7 +330,9 @@ function Viajes({ setIsLoggedIn }) {
                     type="datetime-local"
                     className="form-control mb-2"
                     value={newCarga.fecha_entrega}
-                    onChange={(e) => setNewCarga({ ...newCarga, fecha_entrega: e.target.value })}
+                    onChange={(e) =>
+                      setNewCarga({ ...newCarga, fecha_entrega: e.target.value })
+                    }
                     required
                   />
                   <button type="submit" className="btn btn-success w-100">
@@ -408,43 +348,105 @@ function Viajes({ setIsLoggedIn }) {
                 <h3>Asignar Viaje</h3>
                 {selectedCarga ? (
                   <form onSubmit={handleAsignarViaje}>
-                    <input
-                      type="number"
-                      step="0.000001"
-                      className="form-control mb-2"
-                      placeholder="Origen Latitud"
-                      value={newViaje.origen_latitud}
-                      onChange={(e) => setNewViaje({ ...newViaje, origen_latitud: e.target.value })}
-                      required
-                    />
-                    <input
-                      type="number"
-                      step="0.000001"
-                      className="form-control mb-2"
-                      placeholder="Origen Longitud"
-                      value={newViaje.origen_longitud}
-                      onChange={(e) => setNewViaje({ ...newViaje, origen_longitud: e.target.value })}
-                      required
-                    />
-                    <input
-                      type="number"
-                      step="0.000001"
-                      className="form-control mb-2"
-                      placeholder="Destino Latitud"
-                      value={newViaje.destino_latitud}
-                      onChange={(e) => setNewViaje({ ...newViaje, destino_latitud: e.target.value })}
-                      required
-                    />
-                    <input
-                      type="number"
-                      step="0.000001"
-                      className="form-control mb-2"
-                      placeholder="Destino Longitud"
-                      value={newViaje.destino_longitud}
-                      onChange={(e) => setNewViaje({ ...newViaje, destino_longitud: e.target.value })}
-                      required
-                    />
-                    <button type="submit" className="btn btn-success w-100">
+                    <p>
+                      <strong>Carga Seleccionada:</strong> {selectedCarga.cliente} -{" "}
+                      {selectedCarga.peso} kg - {selectedCarga.tipo_carga}
+                    </p>
+                    <div className="mb-2">
+                      <label htmlFor="origen" className="form-label">
+                        Origen:
+                      </label>
+                      <Autocomplete
+                        onLoad={(autocomplete) => {
+                          autocomplete.addListener("place_changed", () => {
+                            const place = autocomplete.getPlace();
+                            if (!place.geometry) {
+                              Swal.fire({
+                                icon: "error",
+                                title: "Error",
+                                text: "Selecciona un lugar válido para el origen.",
+                              });
+                              setOrigenSelected(false);
+                              return;
+                            }
+                            const coords = {
+                              lat: place.geometry.location.lat(),
+                              lng: place.geometry.location.lng(),
+                            };
+                            setNewViaje((prev) => ({
+                              ...prev,
+                              origen_latitud: coords.lat,
+                              origen_longitud: coords.lng,
+                            }));
+                            setOrigenInput(place.formatted_address);
+                            setOrigenSelected(true);
+                          });
+                        }}
+                      >
+                        <input
+                          type="text"
+                          id="origen"
+                          className="form-control"
+                          placeholder="Busca el origen"
+                          value={origenInput}
+                          onChange={(e) => {
+                            setOrigenInput(e.target.value);
+                            setOrigenSelected(false);
+                          }}
+                          required
+                        />
+                      </Autocomplete>
+                    </div>
+                    <div className="mb-2">
+                      <label htmlFor="destino" className="form-label">
+                        Destino:
+                      </label>
+                      <Autocomplete
+                        onLoad={(autocomplete) => {
+                          autocomplete.addListener("place_changed", () => {
+                            const place = autocomplete.getPlace();
+                            if (!place.geometry) {
+                              Swal.fire({
+                                icon: "error",
+                                title: "Error",
+                                text: "Selecciona un lugar válido para el destino.",
+                              });
+                              setDestinoSelected(false);
+                              return;
+                            }
+                            const coords = {
+                              lat: place.geometry.location.lat(),
+                              lng: place.geometry.location.lng(),
+                            };
+                            setNewViaje((prev) => ({
+                              ...prev,
+                              destino_latitud: coords.lat,
+                              destino_longitud: coords.lng,
+                            }));
+                            setDestinoInput(place.formatted_address);
+                            setDestinoSelected(true);
+                          });
+                        }}
+                      >
+                        <input
+                          type="text"
+                          id="destino"
+                          className="form-control"
+                          placeholder="Busca el destino"
+                          value={destinoInput}
+                          onChange={(e) => {
+                            setDestinoInput(e.target.value);
+                            setDestinoSelected(false);
+                          }}
+                          required
+                        />
+                      </Autocomplete>
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-success w-100"
+                      disabled={!origenSelected || !destinoSelected}
+                    >
                       Asignar Viaje
                     </button>
                   </form>
@@ -466,23 +468,25 @@ function Viajes({ setIsLoggedIn }) {
                       key={viaje.id_viaje}
                       className="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"
                       style={{ backgroundColor: "#f8f9fa", cursor: "pointer" }}
-                      onClick={() => setSelectedViaje(viaje)}
                     >
                       <div>
                         <p>
-                          <strong>ID Viaje:</strong> {viaje.id_viaje}<br />
-                          <strong>Estado:</strong> {viaje.estado}<br />
-                          <strong>Origen:</strong> {viaje.origen_latitud}, {viaje.origen_longitud}<br />
-                          <strong>Destino:</strong> {viaje.destino_latitud}, {viaje.destino_longitud}<br />
+                          <strong>ID Viaje:</strong> {viaje.id_viaje}
+                          <br />
+                          <strong>Estado:</strong> {viaje.estado}
+                          <br />
+                          <strong>Conductor:</strong> {viaje.conductor}
+                          <br />
                           <strong>Cliente(s):</strong>{" "}
                           {viaje.cargas.map((c) => c.cliente).join(", ") || "N/A"}
+                          <br />
                         </p>
                       </div>
                       <button
                         className="btn btn-dark"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedViaje(viaje);
+                          handleShowModal(viaje);
                         }}
                       >
                         Ver más
@@ -490,47 +494,61 @@ function Viajes({ setIsLoggedIn }) {
                     </div>
                   ))
                 )}
-                {selectedViaje && (
-                  <div className="mt-3 p-3 border rounded" style={{ backgroundColor: "#e9ecef" }}>
-                    <h4>Detalles del Viaje</h4>
-                    <p>
-                      <strong>ID Viaje:</strong> {selectedViaje.id_viaje}<br />
-                      <strong>Vehículo:</strong>{" "}
-                      {selectedViaje.id_vehiculo || "No asignado"}<br />
-                      <strong>Estado:</strong> {selectedViaje.estado}<br />
-                      <strong>Origen:</strong>{" "}
-                      {selectedViaje.origen_latitud}, {selectedViaje.origen_longitud}<br />
-                      <strong>Destino:</strong>{" "}
-                      {selectedViaje.destino_latitud}, {selectedViaje.destino_longitud}<br />
-                      <strong>Fecha Entrega:</strong>{" "}
-                      {new Date(selectedViaje.fecha_entrega).toLocaleString()}<br />
-                      <strong>Fecha Salida:</strong>{" "}
-                      {selectedViaje.fecha_salida
-                        ? new Date(selectedViaje.fecha_salida).toLocaleString()
-                        : "No iniciada"}<br />
-                      <strong>Cargas:</strong>
-                      <ul>
-                        {selectedViaje.cargas.map((carga, index) => (
-                          <li key={index}>
-                            {carga.cliente} - {carga.peso} kg - {carga.volumen} m³ -{" "}
-                            {carga.tipo_carga}
-                          </li>
-                        ))}
-                      </ul>
-                    </p>
-                    <button
-                      className="btn btn-secondary mt-2"
-                      onClick={() => setSelectedViaje(null)}
-                    >
-                      Cerrar
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal para detalles del viaje */}
+      <Modal show={showModal} onHide={handleCloseModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Detalles del Viaje</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selectedViaje && (
+            <div>
+              <p>
+                <strong>ID Viaje:</strong> {selectedViaje.id_viaje}
+                <br />
+                <strong>Vehículo:</strong>{" "}
+                {selectedViaje.id_vehiculo || "No asignado"}
+                <br />
+                <strong>Conductor:</strong> {selectedViaje.conductor}
+                <br />
+                <strong>Estado:</strong> {selectedViaje.estado}
+                <br />
+                <strong>Origen:</strong> {origenAddress || "Cargando..."}
+                <br />
+                <strong>Destino:</strong> {destinoAddress || "Cargando..."}
+                <br />
+                <strong>Fecha Entrega:</strong>{" "}
+                {formatLocalDate(selectedViaje.fecha_entrega)}
+                <br />
+                <strong>Fecha Salida:</strong>{" "}
+                {selectedViaje.fecha_salida
+                  ? formatLocalDate(selectedViaje.fecha_salida)
+                  : "No iniciada"}
+                <br />
+                <strong>Cargas:</strong>
+                <ul>
+                  {selectedViaje.cargas.map((carga, index) => (
+                    <li key={index}>
+                      {carga.cliente} - {carga.peso} kg - {carga.volumen} m³ -{" "}
+                      {carga.tipo_carga}
+                    </li>
+                  ))}
+                </ul>
+              </p>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={handleCloseModal}>
+            Cerrar
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }
