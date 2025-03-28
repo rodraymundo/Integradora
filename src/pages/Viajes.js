@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import Header from "../Header";
 import Swal from "sweetalert2";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { Autocomplete, useJsApiLoader } from "@react-google-maps/api"; // Asegúrate de tener useJsApiLoader si no lo estás usando ya
+import { Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { format } from "date-fns";
-import { Modal, Button } from "react-bootstrap";
+import { Modal, Button, Form } from "react-bootstrap";
 
 function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const [cargas, setCargas] = useState([]);
@@ -30,8 +30,10 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const [origenSelected, setOrigenSelected] = useState(false);
   const [destinoSelected, setDestinoSelected] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [origenAddress, setOrigenAddress] = useState(""); // Nuevo estado para la dirección de origen
-  const [destinoAddress, setDestinoAddress] = useState(""); // Nuevo estado para la dirección de destino
+  const [showDetailsFormModal, setShowDetailsFormModal] = useState(false);
+  const [origenAddress, setOrigenAddress] = useState("");
+  const [destinoAddress, setDestinoAddress] = useState("");
+  const [tripDetails, setTripDetails] = useState("");
 
   const tiposCarga = ["Carga seca", "Refrigerada", "Plataforma", "Cama baja"];
 
@@ -102,6 +104,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
             fecha_entrega: curr.fecha_entrega,
             fecha_salida: curr.fecha_salida,
             conductor: `${curr.conductor_nombre || ""} ${curr.conductor_apaterno || ""} ${curr.conductor_amaterno || ""}`.trim() || "Sin conductor",
+            detalles_viaje: curr.detalles_viaje,
             cargas: [carga],
           });
         }
@@ -192,7 +195,6 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
     }
   };
 
-  // Función para convertir coordenadas a dirección usando la API de Google Maps
   const getAddressFromCoords = (lat, lng) => {
     return new Promise((resolve, reject) => {
       const geocoder = new window.google.maps.Geocoder();
@@ -227,6 +229,48 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
     setSelectedViaje(null);
     setOrigenAddress("");
     setDestinoAddress("");
+  };
+
+  const handleShowDetailsForm = (viaje) => {
+    setSelectedViaje(viaje);
+    setTripDetails(viaje.detalles_viaje || "");
+    setShowDetailsFormModal(true);
+  };
+
+  const handleCloseDetailsForm = () => {
+    setShowDetailsFormModal(false);
+    setTripDetails("");
+  };
+
+  const handleDetailsChange = (e) => {
+    setTripDetails(e.target.value);
+  };
+
+  const handleDetailsSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`http://localhost:5000/viaje/${selectedViaje.id_viaje}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ detalles_viaje: tripDetails }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al actualizar los detalles del viaje");
+      }
+
+      Swal.fire("Éxito", "Detalles del viaje actualizados", "success");
+      fetchViajesActivos();
+      handleCloseDetailsForm();
+      if (showModal) {
+        setSelectedViaje({ ...selectedViaje, detalles_viaje: tripDetails });
+      }
+    } catch (error) {
+      console.error("Error al guardar detalles del viaje:", error);
+      Swal.fire("Error", "Error al guardar los detalles: " + error.message, "error");
+    }
   };
 
   if (!isGoogleMapsLoaded) {
@@ -455,7 +499,6 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
                 )}
               </div>
             </div>
-
             {/* Lista de Viajes */}
             <div className="col-lg-4">
               <div className="border rounded p-3 h-100">
@@ -466,10 +509,10 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
                   viajes.map((viaje) => (
                     <div
                       key={viaje.id_viaje}
-                      className="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"
+                      className="d-flex align-items-center mb-2 p-2 border-bottom"
                       style={{ backgroundColor: "#f8f9fa", cursor: "pointer" }}
                     >
-                      <div>
+                      <div className="flex-grow-1">
                         <p>
                           <strong>ID Viaje:</strong> {viaje.id_viaje}
                           <br />
@@ -482,15 +525,38 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
                           <br />
                         </p>
                       </div>
-                      <button
-                        className="btn btn-dark"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleShowModal(viaje);
-                        }}
-                      >
-                        Ver más
-                      </button>
+                      <div className="d-flex flex-column gap-2">
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          style={{
+                            borderRadius: "8px",
+                            fontSize: "0.85rem",
+                            padding: "4px 10px",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShowModal(viaje);
+                          }}
+                        >
+                          Ver más
+                        </button>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          style={{
+                            borderRadius: "8px",
+                            fontSize: "0.85rem",
+                            padding: "4px 10px",
+                            backgroundColor: "#007bff",
+                            borderColor: "#007bff",
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleShowDetailsForm(viaje);
+                          }}
+                        >
+                          Agregar detalles
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -530,6 +596,9 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
                   ? formatLocalDate(selectedViaje.fecha_salida)
                   : "No iniciada"}
                 <br />
+                <strong>Detalles del Viaje:</strong>{" "}
+                {selectedViaje.detalles_viaje || "Sin detalles"}
+                <br />
                 <strong>Cargas:</strong>
                 <ul>
                   {selectedViaje.cargas.map((carga, index) => (
@@ -547,7 +616,37 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
           <Button variant="secondary" onClick={handleCloseModal}>
             Cerrar
           </Button>
+          <Button
+            variant="primary"
+            onClick={() => handleShowDetailsForm(selectedViaje)}
+          >
+            Editar Detalles
+          </Button>
         </Modal.Footer>
+      </Modal>
+
+      {/* Modal para agregar/editar detalles */}
+      <Modal show={showDetailsFormModal} onHide={handleCloseDetailsForm}>
+        <Modal.Header closeButton>
+          <Modal.Title>Agregar/Editar Detalles del Viaje</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form onSubmit={handleDetailsSubmit}>
+            <Form.Group className="mb-3">
+              <Form.Label>Detalles del Viaje</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={tripDetails}
+                onChange={handleDetailsChange}
+                placeholder="Ingresa los detalles del viaje (opcional)"
+              />
+            </Form.Group>
+            <Button variant="primary" type="submit">
+              Guardar Detalles
+            </Button>
+          </Form>
+        </Modal.Body>
       </Modal>
     </div>
   );

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import Header from "../Header";
 import "bootstrap/dist/css/bootstrap.min.css";
-import { GoogleMap, Marker } from "@react-google-maps/api"; // Sin LoadScript
+import { GoogleMap, Marker } from "@react-google-maps/api";
 import Modal from "react-bootstrap/Modal";
 import Button from "react-bootstrap/Button";
 import Form from "react-bootstrap/Form";
@@ -15,7 +15,8 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
   };
 
   const [vehicles, setVehicles] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]); // Conductores disponibles para el formulario
+  const [allUsers, setAllUsers] = useState([]); // Todos los usuarios para mostrar nombres
   const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -30,16 +31,19 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
     tipo_vehiculo: "pickup",
     tipo_carga: "carga seca",
     id_usuario: "",
+    folio_iot: "",
   });
   const [address, setAddress] = useState("");
 
   useEffect(() => {
     fetchVehicles();
-  }, []); // Solo cargamos los vehículos al inicio
-  
+    fetchAllUsers(); // Cargar todos los usuarios al montar el componente
+  }, []);
+
   useEffect(() => {
-    fetchUsers(); // Esto se ejecutará cada vez que vehicles cambie
-  }, [vehicles]); // Agregamos vehicles como dependencia
+    if (vehicles.length === 0 && !isEditing) return;
+    fetchUsers();
+  }, [vehicles, isEditing, selectedVehicle]);
 
   const fetchVehicles = async () => {
     try {
@@ -62,18 +66,51 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
     }
   };
 
+  const fetchAllUsers = async () => {
+    try {
+      const response = await fetch("http://localhost:5000/usuario");
+      const data = await response.json();
+      setAllUsers(data); // Guardar todos los usuarios
+    } catch (error) {
+      console.error("Error al cargar todos los usuarios:", error);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const response = await fetch("http://localhost:5000/usuario");
       const data = await response.json();
-      // Filtrar usuarios: solo conductores y que no tengan un vehículo asignado
-      const availableConductors = data.filter(user => {
-        // Solo usuarios con tipo_usuario = 'conductor'
-        if (user.tipo_usuario !== 'conductor') return false;
-        // Excluir conductores que ya tienen un vehículo asignado
-        return !vehicles.some(vehicle => vehicle.id_usuario === user.id_usuario && vehicle.estatus === 1);
+      console.log("Todos los usuarios:", data);
+      console.log("Vehículos activos:", vehicles);
+
+      let availableConductors = data.filter((user) => {
+        if (user.tipo_usuario !== "conductor") return false;
+        const hasVehicle = vehicles.some((vehicle) => {
+          const vehicleUserId = Number(vehicle.id_usuario);
+          const userId = Number(user.id_usuario);
+          const vehicleStatus = vehicle.estatus;
+          console.log(`Comparando vehículo ${vehicle.matricula}: id_usuario=${vehicleUserId}, estatus=${vehicleStatus} con usuario ${userId}`);
+          return vehicleUserId === userId && vehicleStatus === 1;
+        });
+        console.log(`Usuario ${user.id_usuario} tiene vehículo asignado: ${hasVehicle}`);
+        return !hasVehicle;
       });
-      setUsers(availableConductors);
+
+      if (isEditing && selectedVehicle && selectedVehicle.id_usuario) {
+        const currentDriver = data.find(
+          (user) => Number(user.id_usuario) === Number(selectedVehicle.id_usuario)
+        );
+        if (
+          currentDriver &&
+          !availableConductors.some((u) => Number(u.id_usuario) === Number(currentDriver.id_usuario))
+        ) {
+          availableConductors = [...availableConductors, currentDriver];
+          console.log("Añadiendo conductor actual:", currentDriver);
+        }
+      }
+
+      console.log("Conductores disponibles:", availableConductors);
+      setUsers(availableConductors); // Solo conductores disponibles para el formulario
     } catch (error) {
       console.error("Error al cargar usuarios:", error);
     }
@@ -108,6 +145,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
         tipo_vehiculo: "pickup",
         tipo_carga: "carga seca",
         id_usuario: "",
+        folio_iot: "",
       });
     }
     setShowFormModal(true);
@@ -130,7 +168,10 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
         capacidad_peso_max: parseFloat(formData.capacidad_peso_max),
         capacidad_volumen: parseFloat(formData.capacidad_volumen),
         id_usuario: parseInt(formData.id_usuario) || null,
+        folio_iot: formData.folio_iot || null,
       };
+
+      console.log("Datos enviados al backend:", parsedFormData);
 
       const url = isEditing
         ? `http://localhost:5000/vehiculo/${formData.matricula}`
@@ -143,12 +184,15 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
         body: JSON.stringify(parsedFormData),
       });
 
-      if (!response.ok) throw new Error("Error al guardar el vehículo");
-      fetchVehicles();
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al guardar el vehículo");
+      }
+      fetchVehicles(); // Actualiza la lista de vehículos
       handleCloseForm();
     } catch (error) {
       console.error("Error al guardar vehículo:", error);
-      alert("Error al guardar el vehículo.");
+      alert("Error al guardar el vehículo: " + error.message);
     }
   };
 
@@ -170,17 +214,22 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
   };
 
   const getUserName = (id_usuario) => {
-    const user = users.find((u) => u.id_usuario === id_usuario);
-    return user ? `${user.nombre} ${user.apaterno} ${user.amaterno}` : "Desconocido";
+    const user = allUsers.find((u) => Number(u.id_usuario) === Number(id_usuario));
+    return user ? `${user.nombre} ${user.apaterno} ${user.amaterno || ""}` : "Desconocido";
   };
 
   const getStatusIcon = (estado) => {
     switch (estado) {
-      case "mantenimiento": return <FontAwesomeIcon icon={faTools} title="En mantenimiento" style={{ color: "orange" }} />;
-      case "disponible": return <FontAwesomeIcon icon={faTruck} title="Disponible" style={{ color: "green" }} />;
-      case "en ruta": return <FontAwesomeIcon icon={faBox} title="En ruta" style={{ color: "blue" }} />;
-      case "fuera de servicio": return <FontAwesomeIcon icon={faBan} title="Fuera de servicio" style={{ color: "red" }} />;
-      default: return null;
+      case "mantenimiento":
+        return <FontAwesomeIcon icon={faTools} title="En mantenimiento" style={{ color: "orange" }} />;
+      case "disponible":
+        return <FontAwesomeIcon icon={faTruck} title="Disponible" style={{ color: "green" }} />;
+      case "en ruta":
+        return <FontAwesomeIcon icon={faBox} title="En ruta" style={{ color: "blue" }} />;
+      case "fuera de servicio":
+        return <FontAwesomeIcon icon={faBan} title="Fuera de servicio" style={{ color: "red" }} />;
+      default:
+        return null;
     }
   };
 
@@ -208,36 +257,36 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
       <div style={{ padding: "20px", flex: 1 }}>
         <div className="container-fluid">
           <div className="row g-3">
-          <div className="col-lg-4">
-            <div className="border rounded p-3" style={{ maxHeight: "560px", overflowY: "auto" }}>
-              <h3>Mis vehículos</h3>
-              {vehicles.map((vehicle) => (
-                <div
-                  key={vehicle.matricula}
-                  className="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => handleShowDetails(vehicle)}
-                >
-                  <div>
-                    <p>
-                      <strong>Marca:</strong> {vehicle.marca}<br />
-                      <strong>Modelo:</strong> {vehicle.modelo}<br />
-                      <strong>Matrícula:</strong> {vehicle.matricula}<br />
-                      <strong>Tipo de vehículo:</strong> {vehicle.tipo_vehiculo}<br />
-                      <strong>Conductor:</strong> {getUserName(vehicle.id_usuario)}
-                    </p>
+            <div className="col-lg-4">
+              <div className="border rounded p-3" style={{ maxHeight: "560px", overflowY: "auto" }}>
+                <h3>Mis vehículos</h3>
+                {vehicles.map((vehicle) => (
+                  <div
+                    key={vehicle.matricula}
+                    className="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => handleShowDetails(vehicle)}
+                  >
+                    <div>
+                      <p>
+                        <strong>Marca:</strong> {vehicle.marca}<br />
+                        <strong>Modelo:</strong> {vehicle.modelo}<br />
+                        <strong>Matrícula:</strong> {vehicle.matricula}<br />
+                        <strong>Tipo de vehículo:</strong> {vehicle.tipo_vehiculo}<br />
+                        <strong>Conductor:</strong> {getUserName(vehicle.id_usuario)}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center" }}>
+                      {getStatusIcon(vehicle.estado)}
+                      <button className="btn btn-dark ms-2">Ver más</button>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center" }}>
-                    {getStatusIcon(vehicle.estado)}
-                    <button className="btn btn-dark ms-2">Ver más</button>
-                  </div>
-                </div>
-              ))}
-              <button className="btn btn-success mt-3 w-100" onClick={() => handleShowForm()}>
-                Añadir vehículo
-              </button>
+                ))}
+                <button className="btn btn-success mt-3 w-100" onClick={() => handleShowForm()}>
+                  Añadir vehículo
+                </button>
+              </div>
             </div>
-          </div>
             <div className="col-lg-8">
               <div className="border rounded p-3">
                 <h3>Mapa de Vehículos</h3>
@@ -266,7 +315,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
         </div>
       </div>
 
-      {/* Modales permanecen iguales */}
+      {/* Modal de Detalles */}
       <Modal show={showDetailsModal} onHide={handleCloseDetails}>
         <Modal.Header closeButton>
           <Modal.Title>Detalles del vehículo</Modal.Title>
@@ -280,6 +329,8 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
               <p><strong>Capacidad (Peso):</strong> {selectedVehicle.capacidad_peso_max} kg</p>
               <p><strong>Peso Disponible:</strong> {selectedVehicle.peso_disponible || "N/A"} kg</p>
               <p><strong>Capacidad (Volumen):</strong> {selectedVehicle.capacidad_volumen} m³</p>
+              <p><strong>Volumen Disponible:</strong> {selectedVehicle.volumen_disponible || "N/A"} m³</p>
+              <p><strong>Folio IoT:</strong> {selectedVehicle.folio_iot || "N/A"}</p>
               <p><strong>Estado:</strong> {selectedVehicle.estado}</p>
               <p><strong>Tipo de vehículo:</strong> {selectedVehicle.tipo_vehiculo}</p>
               <p><strong>Tipo de carga soportada:</strong> {selectedVehicle.tipo_carga}</p>
@@ -294,6 +345,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
         </Modal.Footer>
       </Modal>
 
+      {/* Modal de Formulario */}
       <Modal show={showFormModal} onHide={handleCloseForm}>
         <Modal.Header closeButton>
           <Modal.Title>{isEditing ? "Editar vehículo" : "Añadir vehículo"}</Modal.Title>
@@ -352,6 +404,15 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
               />
             </Form.Group>
             <Form.Group className="mb-3">
+              <Form.Label>Folio IoT</Form.Label>
+              <Form.Control
+                type="text"
+                name="folio_iot"
+                value={formData.folio_iot || ""}
+                onChange={handleFormChange}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
               <Form.Label>Estado</Form.Label>
               <Form.Select name="estado" value={formData.estado} onChange={handleFormChange}>
                 <option value="mantenimiento">En mantenimiento</option>
@@ -378,16 +439,23 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
             </Form.Group>
             <Form.Group className="mb-3">
               <Form.Label>Conductor</Form.Label>
-              <Form.Select name="id_usuario" value={formData.id_usuario} onChange={handleFormChange}>
+              <Form.Select
+                name="id_usuario"
+                value={formData.id_usuario}
+                onChange={handleFormChange}
+                required
+              >
                 <option value="">Selecciona un conductor</option>
                 {users.map((user) => (
                   <option key={user.id_usuario} value={user.id_usuario}>
-                    {`${user.nombre} ${user.apaterno} ${user.amaterno}`}
+                    {`${user.nombre} ${user.apaterno} ${user.amaterno || ""}`}
                   </option>
                 ))}
               </Form.Select>
             </Form.Group>
-            <Button variant="primary" type="submit">{isEditing ? "Guardar" : "Añadir vehículo"}</Button>
+            <Button variant="primary" type="submit">
+              {isEditing ? "Guardar" : "Añadir vehículo"}
+            </Button>
           </Form>
         </Modal.Body>
       </Modal>

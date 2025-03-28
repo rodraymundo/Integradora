@@ -235,16 +235,21 @@ app.delete('/usuario/:id', (req, res) => {
 app.get('/vehiculo/active', (req, res) => {
   const sql = `
     SELECT matricula, marca, modelo, capacidad_peso_max, capacidad_volumen, tipo_carga, 
-           peso_disponible, estado, tipo_vehiculo, id_usuario
+           peso_disponible, estado, tipo_vehiculo, id_usuario, volumen_disponible, folio_iot, estatus
     FROM vehiculo 
     WHERE estatus = 1
-  `; 
+  `;
   db.query(sql, (err, results) => {
     if (err) {
       console.error("Error al obtener vehículos:", err);
       return res.status(500).send(err);
     }
-    res.json(results);
+    const formattedResults = results.map((vehicle) => ({
+      ...vehicle,
+      id_usuario: Number(vehicle.id_usuario),
+    }));
+    console.log("Vehículos enviados al frontend:", formattedResults);
+    res.json(formattedResults);
   });
 });
 
@@ -259,6 +264,7 @@ app.post('/vehiculo', (req, res) => {
     tipo_vehiculo,
     tipo_carga,
     id_usuario,
+    folio_iot,
   } = req.body;
 
   if (
@@ -276,14 +282,15 @@ app.post('/vehiculo', (req, res) => {
   }
 
   const peso_disponible = capacidad_peso_max;
-  const folio_iot = null;
+  const volumen_disponible = capacidad_volumen; // Asignar capacidad_volumen a volumen_disponible
   const estatus = 1;
 
   const sql = `
     INSERT INTO vehiculo (
       matricula, marca, modelo, capacidad_peso_max, capacidad_volumen, 
-      estado, tipo_vehiculo, tipo_carga, id_usuario, peso_disponible, folio_iot, estatus
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      estado, tipo_vehiculo, tipo_carga, id_usuario, peso_disponible, 
+      volumen_disponible, folio_iot, estatus
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   db.query(
     sql,
@@ -298,7 +305,8 @@ app.post('/vehiculo', (req, res) => {
       tipo_carga,
       id_usuario,
       peso_disponible,
-      folio_iot,
+      volumen_disponible, // Añadir volumen_disponible aquí
+      folio_iot || null,
       estatus,
     ],
     (err, result) => {
@@ -321,6 +329,8 @@ app.put('/vehiculo/:matricula', (req, res) => {
     tipo_vehiculo,
     tipo_carga,
     id_usuario,
+    volumen_disponible, // Puede venir del frontend o calcularse
+    folio_iot,
   } = req.body;
 
   if (
@@ -336,10 +346,14 @@ app.put('/vehiculo/:matricula', (req, res) => {
     return res.status(400).json({ message: "Faltan campos requeridos" });
   }
 
+  // Si no se envía volumen_disponible, usar capacidad_volumen por defecto
+  const newVolumenDisponible = volumen_disponible !== undefined ? volumen_disponible : capacidad_volumen;
+
   const sql = `
     UPDATE vehiculo 
     SET marca = ?, modelo = ?, capacidad_peso_max = ?, capacidad_volumen = ?, 
-        estado = ?, tipo_vehiculo = ?, tipo_carga = ?, id_usuario = ?
+        estado = ?, tipo_vehiculo = ?, tipo_carga = ?, id_usuario = ?, 
+        volumen_disponible = ?, folio_iot = ?
     WHERE matricula = ?
   `;
   db.query(
@@ -353,6 +367,8 @@ app.put('/vehiculo/:matricula', (req, res) => {
       tipo_vehiculo,
       tipo_carga,
       id_usuario,
+      newVolumenDisponible || null, // Usar el calculado o null
+      folio_iot || null,
       req.params.matricula,
     ],
     (err, result) => {
@@ -462,7 +478,8 @@ app.get('/vista_viajes_activos', (req, res) => {
       descripcion,
       conductor_nombre,     
       conductor_apaterno,     
-      conductor_amaterno
+      conductor_amaterno,
+      detalles_viaje
     FROM vista_viajes_activos
   `;
   db.query(sql, (err, results) => {
@@ -471,6 +488,30 @@ app.get('/vista_viajes_activos', (req, res) => {
       return res.status(500).json({ message: "Error al obtener viajes activos", error: err.message });
     }
     res.json(results);
+  });
+});
+
+app.put('/viaje/:id_viaje', (req, res) => {
+  const { detalles_viaje } = req.body;
+
+  if (detalles_viaje === undefined) {
+    return res.status(400).json({ message: "El campo detalles_viaje es requerido" });
+  }
+
+  const sql = `
+    UPDATE viaje 
+    SET detalles_viaje = ?
+    WHERE id_viaje = ?
+  `;
+  db.query(sql, [detalles_viaje || null, req.params.id_viaje], (err, result) => {
+    if (err) {
+      console.error("Error al actualizar detalles del viaje:", err);
+      return res.status(500).json({ message: "Error al actualizar detalles del viaje", error: err.message });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Viaje no encontrado" });
+    }
+    res.json({ message: "Detalles del viaje actualizados" });
   });
 });
 
