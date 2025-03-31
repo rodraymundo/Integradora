@@ -7,8 +7,14 @@ import Button from "react-bootstrap/Button";
 import Form from "react-bootstrap/Form";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTools, faTruck, faBox, faBan } from "@fortawesome/free-solid-svg-icons";
+import Swal from "sweetalert2"; // Importar SweetAlert2
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
+
+
+
   const handleLogout = () => {
     localStorage.removeItem("userSession");
     setIsLoggedIn(false);
@@ -34,10 +40,18 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
     folio_iot: "",
   });
   const [address, setAddress] = useState("");
+  const [noLocationMessage, setNoLocationMessage] = useState(""); // Mensaje para vehículos sin ubicación
 
   useEffect(() => {
     fetchVehicles();
     fetchAllUsers(); // Cargar todos los usuarios al montar el componente
+
+    // Actualizar las ubicaciones cada 30 segundos
+    const interval = setInterval(() => {
+      fetchVehicles();
+    }, 30000);
+
+    return () => clearInterval(interval); // Limpiar el intervalo al desmontar el componente
   }, []);
 
   useEffect(() => {
@@ -47,38 +61,60 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch("http://localhost:5000/vehiculo/active");
+      const response = await fetch(`${API_URL}/vehiculo/active`, {
+  credentials: "include",
+});
       const data = await response.json();
-      const vehiclesWithPositions = data.map((vehicle) => {
-        const randomLatOffset = (Math.random() - 0.5) * 0.02;
-        const randomLngOffset = (Math.random() - 0.5) * 0.02;
-        return {
-          ...vehicle,
-          position: {
-            lat: 20.6539 + randomLatOffset,
-            lng: -100.4351 + randomLngOffset,
-          },
-        };
-      });
-      setVehicles(vehiclesWithPositions);
+      console.log("Datos de vehículos:", data);
+
+      // Verificar si hay vehículos sin ubicación
+      const vehiclesWithoutLocation = data.filter((vehicle) => !vehicle.position);
+      if (vehiclesWithoutLocation.length > 0) {
+        setNoLocationMessage(
+          `No hay ubicación disponible para ${vehiclesWithoutLocation.length} vehículo(s): ${vehiclesWithoutLocation
+            .map((v) => `${v.marca} ${v.modelo}`)
+            .join(", ")}`
+        );
+      } else {
+        setNoLocationMessage("");
+      }
+
+      setVehicles(data);
     } catch (error) {
       console.error("Error al cargar vehículos:", error);
+      setNoLocationMessage("Error al cargar las ubicaciones de los vehículos.");
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar los vehículos. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
   const fetchAllUsers = async () => {
     try {
-      const response = await fetch("http://localhost:5000/usuario");
+      const response = await fetch(`${API_URL}/usuario`, {
+  credentials: "include",
+});
       const data = await response.json();
       setAllUsers(data); // Guardar todos los usuarios
     } catch (error) {
       console.error("Error al cargar todos los usuarios:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar los usuarios. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch("http://localhost:5000/usuario");
+      const response = await fetch(`${API_URL}/usuario`, {
+  credentials: "include",
+});
       const data = await response.json();
       console.log("Todos los usuarios:", data);
       console.log("Vehículos activos:", vehicles);
@@ -113,6 +149,12 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
       setUsers(availableConductors); // Solo conductores disponibles para el formulario
     } catch (error) {
       console.error("Error al cargar usuarios:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar los conductores disponibles. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
@@ -174,41 +216,92 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
       console.log("Datos enviados al backend:", parsedFormData);
 
       const url = isEditing
-        ? `http://localhost:5000/vehiculo/${formData.matricula}`
-        : "http://localhost:5000/vehiculo";
+        ? `${API_URL}/vehiculo/${formData.matricula}`
+        : `${API_URL}/vehiculo`;
       const method = isEditing ? "PUT" : "POST";
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsedFormData),
+        credentials: "include",
       });
 
       if (!response.ok) {
         const errorData = await response.json();
+        if (errorData.message.includes("Duplicate entry")) {
+          throw new Error("La matrícula ya está registrada");
+        }
         throw new Error(errorData.message || "Error al guardar el vehículo");
       }
+
+      // Mostrar mensaje de éxito
+      Swal.fire({
+        icon: "success",
+        title: isEditing ? "Vehículo actualizado" : "Vehículo creado",
+        text: isEditing
+          ? "El vehículo ha sido actualizado exitosamente."
+          : "El vehículo ha sido creado exitosamente.",
+        confirmButtonText: "Aceptar",
+      });
+
       fetchVehicles(); // Actualiza la lista de vehículos
       handleCloseForm();
     } catch (error) {
       console.error("Error al guardar vehículo:", error);
-      alert("Error al guardar el vehículo: " + error.message);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "Error al guardar el vehículo. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
   const handleDeleteVehicle = async (matricula) => {
-    if (window.confirm("¿Estás seguro de dar de baja este vehículo?")) {
+    // Mostrar confirmación antes de eliminar
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "¿Estás seguro?",
+      text: "Esta acción dará de baja al vehículo permanentemente.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, dar de baja",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+    });
+
+    if (result.isConfirmed) {
       try {
-        const response = await fetch(`http://localhost:5000/vehiculo/${matricula}/delete`, {
+        const response = await fetch(`${API_URL}/vehiculo/${matricula}/delete`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
         });
-        if (!response.ok) throw new Error("Error al eliminar el vehículo");
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Error al dar de baja el vehículo");
+        }
+
+        // Mostrar mensaje de éxito
+        Swal.fire({
+          icon: "success",
+          title: "Vehículo dado de baja",
+          text: "El vehículo ha sido dado de baja exitosamente.",
+          confirmButtonText: "Aceptar",
+        });
+
         fetchVehicles();
         handleCloseDetails();
       } catch (error) {
         console.error("Error al eliminar vehículo:", error);
-        alert("Error al eliminar el vehículo.");
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: error.message || "Error al dar de baja el vehículo. Por favor, intenta de nuevo.",
+          confirmButtonText: "Aceptar",
+        });
       }
     }
   };
@@ -248,6 +341,12 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
     } catch (error) {
       console.error("Error al obtener la dirección:", error);
       setAddress("Error al obtener la dirección");
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo obtener la dirección. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
@@ -292,23 +391,28 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
                 <h3>Mapa de Vehículos</h3>
                 {isGoogleMapsLoaded ? (
                   <GoogleMap mapContainerStyle={mapContainerStyle} center={center} zoom={14}>
-                    {vehicles.map((vehicle) => (
-                      <Marker
-                        key={vehicle.matricula}
-                        position={vehicle.position}
-                        title={`${vehicle.marca} - ${vehicle.matricula}`}
-                        icon={{
-                          url: "https://maps.google.com/mapfiles/kml/shapes/truck.png",
-                          scaledSize: new window.google.maps.Size(50, 50),
-                        }}
-                        onMouseOver={() => getAddress(vehicle.position.lat, vehicle.position.lng)}
-                      />
-                    ))}
+                    {vehicles
+                      .filter((vehicle) => vehicle.position) // Solo mostrar vehículos con posición
+                      .map((vehicle) => (
+                        <Marker
+                          key={vehicle.matricula}
+                          position={vehicle.position}
+                          title={`${vehicle.marca} - ${vehicle.matricula}`}
+                          icon={{
+                            url: "https://maps.google.com/mapfiles/kml/shapes/truck.png",
+                            scaledSize: new window.google.maps.Size(50, 50),
+                          }}
+                          onMouseOver={() => getAddress(vehicle.position.lat, vehicle.position.lng)}
+                        />
+                      ))}
                   </GoogleMap>
                 ) : (
                   <p>Cargando mapa...</p>
                 )}
                 {address && <p>Ubicación: {address}</p>}
+                {noLocationMessage && (
+                  <p style={{ color: "orange", marginTop: "10px" }}>{noLocationMessage}</p>
+                )}
               </div>
             </div>
           </div>
@@ -335,6 +439,12 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
               <p><strong>Tipo de vehículo:</strong> {selectedVehicle.tipo_vehiculo}</p>
               <p><strong>Tipo de carga soportada:</strong> {selectedVehicle.tipo_carga}</p>
               <p><strong>Conductor:</strong> {getUserName(selectedVehicle.id_usuario)}</p>
+              <p>
+                <strong>Ubicación:</strong>{" "}
+                {selectedVehicle.position
+                  ? `Lat: ${selectedVehicle.position.lat}, Lng: ${selectedVehicle.position.lng}`
+                  : "No disponible"}
+              </p>
             </div>
           )}
         </Modal.Body>

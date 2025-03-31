@@ -6,6 +6,8 @@ import { Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { format } from "date-fns";
 import { Modal, Button, Form } from "react-bootstrap";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const [cargas, setCargas] = useState([]);
   const [viajes, setViajes] = useState([]);
@@ -44,7 +46,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchCargasSinViaje = async () => {
     try {
-      const response = await fetch("http://localhost:5000/carga/sin-viaje", {
+      const response = await fetch(`${API_URL}/carga/sin-viaje`, {
         credentials: "include",
       });
       if (!response.ok) {
@@ -73,7 +75,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchViajesActivos = async () => {
     try {
-      const response = await fetch("http://localhost:5000/vista_viajes_activos", {
+      const response = await fetch(`${API_URL}/vista_viajes_activos`, {
         credentials: "include",
       });
       if (!response.ok) {
@@ -125,7 +127,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const handleCreateCarga = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch("http://localhost:5000/carga", {
+      const response = await fetch(`${API_URL}/carga`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCarga),
@@ -164,7 +166,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
       fecha_entrega: selectedCarga.fecha_entrega,
     };
     try {
-      const response = await fetch("http://localhost:5000/viaje/asignar-carga", {
+      const response = await fetch(`${API_URL}/viaje/asignar-carga`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -249,7 +251,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const handleDetailsSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:5000/viaje/${selectedViaje.id_viaje}`, {
+      const response = await fetch(`${API_URL}/viaje/${selectedViaje.id_viaje}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ detalles_viaje: tripDetails }),

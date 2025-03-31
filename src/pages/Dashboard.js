@@ -29,7 +29,11 @@ ChartJS.register(
   ArcElement
 );
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded }) => {
+
+
   const [vehicles, setVehicles] = useState([]);
   const [address, setAddress] = useState("");
   const [alertHistory, setAlertHistory] = useState([]);
@@ -37,6 +41,7 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
   const [alertsByLocation, setAlertsByLocation] = useState([]);
   const [citiesData, setCitiesData] = useState({}); // Estado para datos de ciudades
   const [cityCache, setCityCache] = useState({});
+  const [noLocationMessage, setNoLocationMessage] = useState(""); // Mensaje para vehículos sin ubicación
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,29 +74,36 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch("http://localhost:5000/vehiculo/active");
+      const response = await fetch(`${API_URL}/vehiculo/active`, {
+  credentials: "include",
+});
       const data = await response.json();
       console.log("Datos de vehículos:", data);
-      const vehiclesWithPositions = data.map((vehicle) => {
-        const randomLatOffset = (Math.random() - 0.5) * 0.02;
-        const randomLngOffset = (Math.random() - 0.5) * 0.02;
-        return {
-          ...vehicle,
-          position: {
-            lat: 20.6539 + randomLatOffset,
-            lng: -100.4351 + randomLngOffset,
-          },
-        };
-      });
-      setVehicles(vehiclesWithPositions);
+
+      // Verificar si hay vehículos sin ubicación
+      const vehiclesWithoutLocation = data.filter((vehicle) => !vehicle.position);
+      if (vehiclesWithoutLocation.length > 0) {
+        setNoLocationMessage(
+          `No hay ubicación disponible para ${vehiclesWithoutLocation.length} vehículo(s): ${vehiclesWithoutLocation
+            .map((v) => `${v.marca} ${v.modelo}`)
+            .join(", ")}`
+        );
+      } else {
+        setNoLocationMessage("");
+      }
+
+      setVehicles(data);
     } catch (error) {
       console.error("Error al cargar vehículos:", error);
+      setNoLocationMessage("Error al cargar las ubicaciones de los vehículos.");
     }
   };
 
   const fetchAlertHistory = async () => {
     try {
-      const response = await fetch("http://localhost:5000/alertas");
+      const response = await fetch(`${API_URL}/alertas`, {
+  credentials: "include",
+});
       const data = await response.json();
       console.log("Datos de alertas (histórico):", data);
       setAlertHistory(data);
@@ -102,7 +114,9 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchDeliveryTimes = async () => {
     try {
-      const response = await fetch("http://localhost:5000/viaje");
+      const response = await fetch(`${API_URL}/vista_viajes_activos`, {
+  credentials: "include",
+});
       const data = await response.json();
       console.log("Datos de viajes (entrega):", data);
       const filteredData = data.filter((viaje) => viaje.fecha_salida && viaje.fecha_entrega);
@@ -115,7 +129,9 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchAlertsByLocation = async () => {
     try {
-      const response = await fetch("http://localhost:5000/alertas");
+      const response = await fetch(`${API_URL}/alertas`, {
+  credentials: "include",
+});
       const data = await response.json();
       console.log("Datos de alertas (ubicación):", data);
       setAlertsByLocation(data);
@@ -298,25 +314,30 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
                     center={center}
                     zoom={14}
                   >
-                    {vehicles.map((vehicle) => (
-                      <Marker
-                        key={vehicle.matricula}
-                        position={vehicle.position}
-                        title={`${vehicle.marca} - ${vehicle.matricula}`}
-                        icon={{
-                          url: "https://maps.google.com/mapfiles/kml/shapes/truck.png",
-                          scaledSize: new window.google.maps.Size(50, 50),
-                        }}
-                        onMouseOver={() =>
-                          getAddress(vehicle.position.lat, vehicle.position.lng).then(setAddress)
-                        }
-                      />
-                    ))}
+                    {vehicles
+                      .filter((vehicle) => vehicle.position) // Solo mostrar vehículos con posición
+                      .map((vehicle) => (
+                        <Marker
+                          key={vehicle.matricula}
+                          position={vehicle.position}
+                          title={`${vehicle.marca} - ${vehicle.matricula}`}
+                          icon={{
+                            url: "https://maps.google.com/mapfiles/kml/shapes/truck.png",
+                            scaledSize: new window.google.maps.Size(50, 50),
+                          }}
+                          onMouseOver={() =>
+                            getAddress(vehicle.position.lat, vehicle.position.lng).then(setAddress)
+                          }
+                        />
+                      ))}
                   </GoogleMap>
                 ) : (
                   <p>Cargando mapa...</p>
                 )}
                 {address && <p>Ubicación: {address}</p>}
+                {noLocationMessage && (
+                  <p style={{ color: "orange", marginTop: "10px" }}>{noLocationMessage}</p>
+                )}
               </div>
             </div>
             <div className="col-lg-4">

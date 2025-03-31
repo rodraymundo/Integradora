@@ -4,7 +4,11 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { GoogleMap, Marker } from "@react-google-maps/api";
 import Swal from "sweetalert2";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
+
+  
   const handleLogout = () => {
     localStorage.removeItem("userSession");
     setIsLoggedIn(false);
@@ -42,7 +46,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
   useEffect(() => {
     const fetchAlertas = async () => {
       try {
-        const response = await fetch("http://localhost:5000/alertas", {
+        const response = await fetch(`${API_URL}/alertas`, {
           method: "GET",
           credentials: "include",
         });
@@ -54,7 +58,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
               return { ...alerta, direccion };
             })
           );
-          console.log("Datos procesados de alertas:", alertasConDirecciones); // Depuración
+          console.log("Datos procesados de alertas:", alertasConDirecciones);
           setAlertas(alertasConDirecciones);
         } else {
           const errorText = await response.text();
@@ -95,7 +99,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
               <div className="border rounded p-3 h-100" style={{ maxHeight: "550px", overflowY: "auto" }}>
                 <h3>Historial de Alertas</h3>
                 {Object.keys(alertasPorVehiculo).length === 0 ? (
-                  <p>No hay alertas disponibles.</p>
+                  <p>No hay alertas, descansos ni emergencias disponibles.</p>
                 ) : (
                   Object.entries(alertasPorVehiculo).map(([key, vehiculo]) => (
                     <div key={key} className="mb-3">
@@ -137,7 +141,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
             </div>
             <div className="col-lg-8">
               <div className="border rounded p-3 h-100">
-                <h3>Mapa de Alertas</h3>
+                <h3>Mapa de Alertas, Descansos y Emergencias</h3>
                 {isGoogleMapsLoaded ? (
                   <div style={{ position: "relative" }}>
                     <GoogleMap mapContainerStyle={mapContainerStyle} center={center} zoom={10}>
@@ -157,7 +161,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
                         <div style={{ backgroundColor: "#8B4513", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "12px", color: "#ffffff", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)", display: "flex", alignItems: "center" }}>Falla mecánica</div>
                         <div style={{ backgroundColor: "#FF0000", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "12px", color: "#ffffff", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)", display: "flex", alignItems: "center" }}>Accidente</div>
                         <div style={{ backgroundColor: "#FF4500", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "12px", color: "#ffffff", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)", display: "flex", alignItems: "center" }}>Emergencia</div>
-                        <div style={{ backgroundColor: "#800080", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "12px", color: "#ffffff", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)", display: "flex", alignItems: "center", gap: "3px" }}>Descanso activo <span style={{ fontSize: "10px" }}>💤</span></div>
+                        <div style={{ backgroundColor: "#800080", padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", fontSize: "12px", color: "#ffffff", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.1)", display: "flex", alignItems: "center", gap: "3px" }}>Descanso<span style={{ fontSize: "10px" }}>💤</span></div>
                       </div>
                     </div>
                   </div>

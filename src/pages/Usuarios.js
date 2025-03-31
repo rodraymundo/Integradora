@@ -4,8 +4,14 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import Modal from "react-bootstrap/Modal";
 import Button from "react-bootstrap/Button";
 import Form from "react-bootstrap/Form";
+import Swal from "sweetalert2"; // Importar SweetAlert2
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function Usuarios({ setIsLoggedIn }) {
+
+
+
   const handleLogout = () => {
     localStorage.removeItem("userSession");
     setIsLoggedIn(false);
@@ -14,7 +20,7 @@ function Usuarios({ setIsLoggedIn }) {
   // Estados
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [editingUserId, setEditingUserId] = useState(null); // Nuevo estado para el ID del usuario en edición
+  const [editingUserId, setEditingUserId] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -35,11 +41,18 @@ function Usuarios({ setIsLoggedIn }) {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch("http://localhost:5000/usuario");
+      const response = await fetch(`${API_URL}/usuario`, {
+  credentials: "include",
+});
       const data = await response.json();
       setUsers(data);
     } catch (error) {
       console.error("Error al cargar usuarios:", error);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudieron cargar los usuarios. Por favor, intenta de nuevo.",
+      });
     }
   };
 
@@ -55,14 +68,13 @@ function Usuarios({ setIsLoggedIn }) {
 
   const handleCloseDetails = () => {
     setShowDetailsModal(false);
-    // No limpiamos selectedUser aquí para evitar problemas con el formulario de edición
   };
 
   // Manejo del modal de formulario (Añadir/Editar)
   const handleShowForm = (user = null) => {
     if (user) {
       setIsEditing(true);
-      setEditingUserId(user.id_usuario); // Guardamos el ID del usuario que estamos editando
+      setEditingUserId(user.id_usuario);
       setFormData({
         nombre: user.nombre,
         apaterno: user.apaterno,
@@ -74,7 +86,7 @@ function Usuarios({ setIsLoggedIn }) {
       });
     } else {
       setIsEditing(false);
-      setEditingUserId(null); // No hay ID para un usuario nuevo
+      setEditingUserId(null);
       setFormData({
         nombre: "",
         apaterno: "",
@@ -90,7 +102,7 @@ function Usuarios({ setIsLoggedIn }) {
 
   const handleCloseForm = () => {
     setShowFormModal(false);
-    setEditingUserId(null); // Limpiamos el ID al cerrar el formulario
+    setEditingUserId(null);
     setFormData({
       nombre: "",
       apaterno: "",
@@ -115,7 +127,7 @@ function Usuarios({ setIsLoggedIn }) {
         if (!editingUserId) {
           throw new Error("No se encontró el ID del usuario para editar");
         }
-        response = await fetch(`http://localhost:5000/usuario/${editingUserId}`, {
+        response = await fetch(`${API_URL}/usuario/${editingUserId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -128,7 +140,7 @@ function Usuarios({ setIsLoggedIn }) {
           }),
         });
       } else {
-        response = await fetch("http://localhost:5000/usuario", {
+        response = await fetch(`${API_URL}/usuario`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -151,23 +163,51 @@ function Usuarios({ setIsLoggedIn }) {
         throw new Error(errorData.message || "Error al guardar usuario");
       }
 
+      // Mostrar mensaje de éxito
+      Swal.fire({
+        icon: "success",
+        title: isEditing ? "Usuario actualizado" : "Usuario creado",
+        text: isEditing
+          ? "El usuario ha sido actualizado exitosamente."
+          : "El usuario ha sido creado exitosamente.",
+        confirmButtonText: "Aceptar",
+      });
+
       fetchUsers();
       handleCloseForm();
-      handleCloseDetails(); // Cerramos el modal de detalles también
-      setSelectedUser(null); // Limpiamos selectedUser después de guardar
+      handleCloseDetails();
+      setSelectedUser(null);
     } catch (error) {
       console.error("Error al guardar usuario:", error);
-      alert("Error al guardar usuario: " + error.message);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "Error al guardar el usuario. Por favor, intenta de nuevo.",
+        confirmButtonText: "Aceptar",
+      });
     }
   };
 
   // Eliminar usuario
   const handleDeleteUser = async (id) => {
-    if (window.confirm("¿Estás seguro de eliminar este usuario?")) {
+    // Mostrar confirmación antes de eliminar
+    const result = await Swal.fire({
+      icon: "warning",
+      title: "¿Estás seguro?",
+      text: "Esta acción eliminará al usuario permanentemente.",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+    });
+
+    if (result.isConfirmed) {
       try {
-        const response = await fetch(`http://localhost:5000/usuario/${id}`, {
+        const response = await fetch(`${API_URL}/usuario/${id}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
         });
 
         if (!response.ok) {
@@ -175,12 +215,25 @@ function Usuarios({ setIsLoggedIn }) {
           throw new Error(errorData.message || "Error al eliminar usuario");
         }
 
+        // Mostrar mensaje de éxito
+        Swal.fire({
+          icon: "success",
+          title: "Usuario eliminado",
+          text: "El usuario ha sido eliminado exitosamente.",
+          confirmButtonText: "Aceptar",
+        });
+
         fetchUsers();
         handleCloseDetails();
         setSelectedUser(null);
       } catch (error) {
         console.error("Error al eliminar usuario:", error);
-        alert("Error al eliminar usuario: " + error.message);
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: error.message || "Error al eliminar el usuario. Por favor, intenta de nuevo.",
+          confirmButtonText: "Aceptar",
+        });
       }
     }
   };

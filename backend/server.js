@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
@@ -35,7 +36,7 @@ const db = mysql.createConnection({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  multipleStatements: true, // Añade esta línea
+  multipleStatements: true,
 });
 
 db.connect(err => {
@@ -45,6 +46,45 @@ db.connect(err => {
   }
   console.log('Conectado a MySQL');
 });
+
+// Configuración de la conexión a MongoDB
+const uri = "mongodb+srv://YOYI:XekPrkpgCTbqyupz@rutasegura.oxetc.mongodb.net/RutaSegura?retryWrites=true&w=majority&appName=RutaSegura";
+const clientOptions = { serverApi: { version: '1', strict: true, deprecationErrors: true } };
+
+async function connectToMongoDB() {
+  try {
+    await mongoose.connect(uri, {
+      ...clientOptions,
+      serverSelectionTimeoutMS: 30000, // Aumentar a 30 segundos
+      connectTimeoutMS: 30000, // Tiempo de espera para la conexión inicial
+      socketTimeoutMS: 30000, // Tiempo de espera para operaciones
+    });
+    console.log("Conectado a MongoDB Atlas con éxito");
+  } catch (error) {
+    console.error("Error conectando a MongoDB Atlas:", error);
+    process.exit(1);
+  }
+}
+
+connectToMongoDB();
+
+// Esquema y modelo para las alertas de emergencia en MongoDB
+const alertaSchema = new mongoose.Schema({
+  folioIot: String,
+  latitud: Number,
+  longitud: Number,
+  fecha: Date,
+});
+const Alerta = mongoose.model('Alerta', alertaSchema, 'alertasEmergencia');
+
+// Esquema y modelo para las ubicaciones en tiempo real en MongoDB
+const gpsUbicacionSchema = new mongoose.Schema({
+  folioIot: String,
+  latitud: Number,
+  longitud: Number,
+  estatus: Number,
+});
+const GPSData = mongoose.model('GPSData', gpsUbicacionSchema, 'ubicacionesTiempoReal');
 
 // Configuración de la estrategia de Google OAuth
 passport.use(new GoogleStrategy({
@@ -59,12 +99,10 @@ passport.use(new GoogleStrategy({
     if (err) return done(err);
 
     if (results.length === 0) {
-      // Correo no registrado
       return done(null, false, { message: 'El correo no está registrado en el sistema.' });
     }
 
     const user = results[0];
-    // Validar que el usuario sea administrador
     if (user.tipo_usuario !== 'administrador') {
       return done(null, false, { message: 'Solo los administradores pueden iniciar sesión.' });
     }
@@ -146,7 +184,6 @@ app.post('/login', (req, res) => {
     }
 
     const user = results[0];
-    // Validar que el usuario sea administrador
     if (user.tipo_usuario !== 'administrador') {
       return res.status(403).json({ message: "Solo los administradores pueden iniciar sesión." });
     }
@@ -232,25 +269,49 @@ app.delete('/usuario/:id', (req, res) => {
 });
 
 // Rutas de vehículo
-app.get('/vehiculo/active', (req, res) => {
-  const sql = `
-    SELECT matricula, marca, modelo, capacidad_peso_max, capacidad_volumen, tipo_carga, 
-           peso_disponible, estado, tipo_vehiculo, id_usuario, volumen_disponible, folio_iot, estatus
-    FROM vehiculo 
-    WHERE estatus = 1
-  `;
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error("Error al obtener vehículos:", err);
-      return res.status(500).send(err);
-    }
-    const formattedResults = results.map((vehicle) => ({
-      ...vehicle,
-      id_usuario: Number(vehicle.id_usuario),
-    }));
+app.get('/vehiculo/active', async (req, res) => {
+  try {
+    const sql = `
+      SELECT matricula, marca, modelo, capacidad_peso_max, capacidad_volumen, tipo_carga, 
+             peso_disponible, estado, tipo_vehiculo, id_usuario, volumen_disponible, folio_iot, estatus
+      FROM vehiculo 
+      WHERE estatus = 1
+    `;
+    const [vehiclesResults] = await new Promise((resolve, reject) => {
+      db.query(sql, (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    // Obtener las ubicaciones en tiempo real desde MongoDB
+    const ubicacionesResults = await GPSData.find({});
+
+    // Crear un mapa de ubicaciones para buscar rápidamente por folio_iot
+    const ubicacionesMap = ubicacionesResults.reduce((acc, ubicacion) => {
+      acc[ubicacion.folioIot] = {
+        lat: ubicacion.latitud,
+        lng: ubicacion.longitud,
+      };
+      return acc;
+    }, {});
+
+    // Combinar los datos de los vehículos con sus ubicaciones
+    const formattedResults = vehiclesResults.map((vehicle) => {
+      const position = ubicacionesMap[vehicle.folio_iot] || null; // Si no hay ubicación, será null
+      return {
+        ...vehicle,
+        id_usuario: Number(vehicle.id_usuario),
+        position: position ? { lat: position.lat, lng: position.lng } : null,
+      };
+    });
+
     console.log("Vehículos enviados al frontend:", formattedResults);
     res.json(formattedResults);
-  });
+  } catch (error) {
+    console.error("Error al obtener vehículos:", error);
+    res.status(500).json({ message: "Error al obtener vehículos", error: error.message });
+  }
 });
 
 app.post('/vehiculo', (req, res) => {
@@ -282,7 +343,7 @@ app.post('/vehiculo', (req, res) => {
   }
 
   const peso_disponible = capacidad_peso_max;
-  const volumen_disponible = capacidad_volumen; // Asignar capacidad_volumen a volumen_disponible
+  const volumen_disponible = capacidad_volumen;
   const estatus = 1;
 
   const sql = `
@@ -305,7 +366,7 @@ app.post('/vehiculo', (req, res) => {
       tipo_carga,
       id_usuario,
       peso_disponible,
-      volumen_disponible, // Añadir volumen_disponible aquí
+      volumen_disponible,
       folio_iot || null,
       estatus,
     ],
@@ -329,7 +390,7 @@ app.put('/vehiculo/:matricula', (req, res) => {
     tipo_vehiculo,
     tipo_carga,
     id_usuario,
-    volumen_disponible, // Puede venir del frontend o calcularse
+    volumen_disponible,
     folio_iot,
   } = req.body;
 
@@ -346,7 +407,6 @@ app.put('/vehiculo/:matricula', (req, res) => {
     return res.status(400).json({ message: "Faltan campos requeridos" });
   }
 
-  // Si no se envía volumen_disponible, usar capacidad_volumen por defecto
   const newVolumenDisponible = volumen_disponible !== undefined ? volumen_disponible : capacidad_volumen;
 
   const sql = `
@@ -367,7 +427,7 @@ app.put('/vehiculo/:matricula', (req, res) => {
       tipo_vehiculo,
       tipo_carga,
       id_usuario,
-      newVolumenDisponible || null, // Usar el calculado o null
+      newVolumenDisponible || null,
       folio_iot || null,
       req.params.matricula,
     ],
@@ -398,7 +458,6 @@ app.put('/vehiculo/:matricula/delete', (req, res) => {
     res.json({ message: "Vehículo dado de baja" });
   });
 });
-
 
 // Ruta para crear una carga
 app.post('/carga', (req, res) => {
@@ -516,37 +575,102 @@ app.put('/viaje/:id_viaje', (req, res) => {
 });
 
 // Rutas de alertas
-app.get('/alertas', (req, res) => {
-  const sql = `
-    SELECT 
-      a.id_alerta,
-      a.id_viaje,
-      a.fecha_hora,
-      a.tipo_alerta,
-      a.ubicacion_latitud,
-      a.ubicacion_longitud,
-      v.id_vehiculo,
-      v.estado AS estado_viaje,
-      veh.marca,
-      veh.modelo,
-      u.nombre AS conductor_nombre,
-      u.apaterno AS conductor_apaterno,
-      u.amaterno AS conductor_amaterno
-    FROM alertas a
-    JOIN viaje v ON a.id_viaje = v.id_viaje
-    JOIN vehiculo veh ON v.id_vehiculo = veh.matricula
-    JOIN usuario u ON veh.id_usuario = u.id_usuario
-    WHERE a.estatus = 1
-  `;
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error("Error al obtener alertas:", err);
-      return res.status(500).json({ message: "Error al obtener alertas", error: err.message });
-    }
+app.get('/alertas', async (req, res) => {
+  try {
+    // Consulta para obtener las alertas (excluyendo "Descanso activo")
+    const sqlAlertas = `
+      SELECT 
+        a.id_alerta,
+        a.id_viaje,
+        a.fecha_hora,
+        a.tipo_alerta,
+        a.ubicacion_latitud,
+        a.ubicacion_longitud,
+        v.id_vehiculo,
+        v.estado AS estado_viaje,
+        veh.marca,
+        veh.modelo,
+        u.nombre AS conductor_nombre,
+        u.apaterno AS conductor_apaterno,
+        u.amaterno AS conductor_amaterno
+      FROM alertas a
+      JOIN viaje v ON a.id_viaje = v.id_viaje
+      JOIN vehiculo veh ON v.id_vehiculo = veh.matricula
+      JOIN usuario u ON veh.id_usuario = u.id_usuario
+      WHERE a.estatus = 1 AND a.tipo_alerta != 'Descanso activo'
+    `;
 
-    const alertas = results.map(alerta => ({
+    // Consulta para obtener los descansos
+    const sqlDescansos = `
+      SELECT 
+        d.id_descanso,
+        d.id_viaje,
+        d.hora_inicio AS fecha_hora,
+        d.ubicacion_latitud,
+        d.ubicacion_longitud,
+        v.id_vehiculo,
+        v.estado AS estado_viaje,
+        veh.marca,
+        veh.modelo,
+        u.nombre AS conductor_nombre,
+        u.apaterno AS conductor_apaterno,
+        u.amaterno AS conductor_amaterno
+      FROM descansos d
+      JOIN viaje v ON d.id_viaje = v.id_viaje
+      JOIN vehiculo veh ON v.id_vehiculo = veh.matricula
+      JOIN usuario u ON veh.id_usuario = u.id_usuario
+      WHERE d.estatus = 1
+    `;
+
+    // Consulta para obtener información de vehículos y conductores para las alertas de emergencia
+    const sqlVehiculos = `
+      SELECT 
+        veh.folio_iot,
+        veh.marca,
+        veh.modelo,
+        u.nombre AS conductor_nombre,
+        u.apaterno AS conductor_apaterno,
+        u.amaterno AS conductor_amaterno
+      FROM vehiculo veh
+      JOIN usuario u ON veh.id_usuario = u.id_usuario
+      WHERE veh.estatus = 1
+    `;
+
+    // Ejecutar las consultas de MySQL
+    const [alertasResults] = await new Promise((resolve, reject) => {
+      db.query(sqlAlertas, (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    const [descansosResults] = await new Promise((resolve, reject) => {
+      db.query(sqlDescansos, (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    const [vehiculosResults] = await new Promise((resolve, reject) => {
+      db.query(sqlVehiculos, (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    // Obtener las alertas de emergencia desde MongoDB
+    const emergenciasResults = await Alerta.find({});
+
+    // Crear un mapa de vehículos para buscar rápidamente por folio_iot
+    const vehiculosMap = vehiculosResults.reduce((acc, vehiculo) => {
+      acc[vehiculo.folio_iot] = vehiculo;
+      return acc;
+    }, {});
+
+    // Formatear las alertas de MySQL
+    const alertas = alertasResults.map(alerta => ({
       id: alerta.id_alerta,
-      id_viaje: alerta.id_viaje, // Asegurarse de que esté incluido
+      id_viaje: alerta.id_viaje,
       marca: alerta.marca,
       modelo: alerta.modelo,
       conductor: `${alerta.conductor_nombre} ${alerta.conductor_apaterno} ${alerta.conductor_amaterno || ''}`.trim(),
@@ -558,9 +682,50 @@ app.get('/alertas', (req, res) => {
       icon: getIconForAlertType(alerta.tipo_alerta),
     }));
 
-    console.log("Datos enviados desde /alertas:", alertas); // Depuración en el backend
-    res.json(alertas);
-  });
+    // Formatear los descansos
+    const descansos = descansosResults.map(descanso => ({
+      id: descanso.id_descanso,
+      id_viaje: descanso.id_viaje,
+      marca: descanso.marca,
+      modelo: descanso.modelo,
+      conductor: `${descanso.conductor_nombre} ${descanso.conductor_apaterno} ${descanso.conductor_amaterno || ''}`.trim(),
+      coordenadas: {
+        lat: parseFloat(descanso.ubicacion_latitud),
+        lng: parseFloat(descanso.ubicacion_longitud),
+      },
+      tipo: "Descanso activo",
+      icon: getIconForAlertType("Descanso activo"),
+    }));
+
+    // Formatear las alertas de emergencia
+    const emergencias = emergenciasResults
+      .filter(emergencia => vehiculosMap[emergencia.folioIot]) // Filtrar solo las que tienen un vehículo asociado
+      .map(emergencia => {
+        const vehiculo = vehiculosMap[emergencia.folioIot];
+        return {
+          id: emergencia._id.toString(),
+          id_viaje: null, // No tenemos id_viaje para emergencias
+          marca: vehiculo.marca,
+          modelo: vehiculo.modelo,
+          conductor: `${vehiculo.conductor_nombre} ${vehiculo.conductor_apaterno} ${vehiculo.conductor_amaterno || ''}`.trim(),
+          coordenadas: {
+            lat: emergencia.latitud,
+            lng: emergencia.longitud,
+          },
+          tipo: "Emergencia",
+          icon: getIconForAlertType("Emergencia"),
+        };
+      });
+
+    // Combinar todas las alertas
+    const alertasCombinadas = [...alertas, ...descansos, ...emergencias];
+
+    console.log("Datos enviados desde /alertas:", alertasCombinadas);
+    res.json(alertasCombinadas);
+  } catch (error) {
+    console.error("Error al obtener alertas:", error);
+    res.status(500).json({ message: "Error al obtener alertas", error: error.message });
+  }
 });
 
 // Función para asignar el icono según el tipo de alerta
@@ -574,6 +739,8 @@ function getIconForAlertType(tipoAlerta) {
       return "http://maps.google.com/mapfiles/ms/icons/orange-dot.png";
     case 'descanso activo':
       return "http://maps.google.com/mapfiles/ms/icons/purple-dot.png";
+    case 'emergencia':
+      return "http://maps.google.com/mapfiles/ms/icons/orange.png"; // Icono para emergencias
     default:
       return "http://maps.google.com/mapfiles/ms/icons/blue-dot.png";
   }

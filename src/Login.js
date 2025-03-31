@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 function Login({ setIsLoggedIn }) {
   const [formData, setFormData] = useState({ username: "", password: "" });
   const [errors, setErrors] = useState({});
@@ -42,7 +44,7 @@ function Login({ setIsLoggedIn }) {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/login", {
+      const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,7 +93,7 @@ function Login({ setIsLoggedIn }) {
 
   const handleGoogleLogin = () => {
     console.log("Iniciando autenticación con Google...");
-    window.location.href = "http://localhost:5000/auth/google";
+    window.location.href = `${API_URL}/auth/google`;
   };
 
   useEffect(() => {
