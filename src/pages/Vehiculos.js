@@ -9,7 +9,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTools, faTruck, faBox, faBan } from "@fortawesome/free-solid-svg-icons";
 import Swal from "sweetalert2"; // Importar SweetAlert2
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
 
 function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
@@ -61,7 +62,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch(`${API_URL}/vehiculo/active`, {
+      const response = await fetch(`${REACT_APP_API_URL}/vehiculo/active`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -94,7 +95,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchAllUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/usuario`, {
+      const response = await fetch(`${REACT_APP_API_URL}/usuario`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -112,7 +113,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/usuario`, {
+      const response = await fetch(`${REACT_APP_API_URL}/usuario`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -216,8 +217,8 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
       console.log("Datos enviados al backend:", parsedFormData);
 
       const url = isEditing
-        ? `${API_URL}/vehiculo/${formData.matricula}`
-        : `${API_URL}/vehiculo`;
+        ? `${REACT_APP_API_URL}/vehiculo/${formData.matricula}`
+        : `${REACT_APP_API_URL}/vehiculo`;
       const method = isEditing ? "PUT" : "POST";
 
       const response = await fetch(url, {
@@ -273,7 +274,7 @@ function Vehiculos({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
     if (result.isConfirmed) {
       try {
-        const response = await fetch(`${API_URL}/vehiculo/${matricula}/delete`, {
+        const response = await fetch(`${REACT_APP_API_URL}/vehiculo/${matricula}/delete`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",

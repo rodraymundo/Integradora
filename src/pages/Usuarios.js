@@ -6,7 +6,7 @@ import Button from "react-bootstrap/Button";
 import Form from "react-bootstrap/Form";
 import Swal from "sweetalert2"; // Importar SweetAlert2
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function Usuarios({ setIsLoggedIn }) {
 
@@ -41,7 +41,7 @@ function Usuarios({ setIsLoggedIn }) {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/usuario`, {
+      const response = await fetch(`${REACT_APP_API_URL}/usuario`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -127,7 +127,7 @@ function Usuarios({ setIsLoggedIn }) {
         if (!editingUserId) {
           throw new Error("No se encontró el ID del usuario para editar");
         }
-        response = await fetch(`${API_URL}/usuario/${editingUserId}`, {
+        response = await fetch(`${REACT_APP_API_URL}/usuario/${editingUserId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -140,7 +140,7 @@ function Usuarios({ setIsLoggedIn }) {
           }),
         });
       } else {
-        response = await fetch(`${API_URL}/usuario`, {
+        response = await fetch(`${REACT_APP_API_URL}/usuario`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -204,7 +204,7 @@ function Usuarios({ setIsLoggedIn }) {
 
     if (result.isConfirmed) {
       try {
-        const response = await fetch(`${API_URL}/usuario/${id}`, {
+        const response = await fetch(`${REACT_APP_API_URL}/usuario/${id}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           credentials: "include",

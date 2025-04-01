@@ -29,7 +29,7 @@ ChartJS.register(
   ArcElement
 );
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded }) => {
 
@@ -74,7 +74,7 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchVehicles = async () => {
     try {
-      const response = await fetch(`${API_URL}/vehiculo/active`, {
+      const response = await fetch(`${REACT_APP_API_URL}/vehiculo/active`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -101,7 +101,7 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchAlertHistory = async () => {
     try {
-      const response = await fetch(`${API_URL}/alertas`, {
+      const response = await fetch(`${REACT_APP_API_URL}/alertas`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -114,7 +114,7 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchDeliveryTimes = async () => {
     try {
-      const response = await fetch(`${API_URL}/vista_viajes_activos`, {
+      const response = await fetch(`${REACT_APP_API_URL}/vista_viajes_activos`, {
   credentials: "include",
 });
       const data = await response.json();
@@ -129,7 +129,7 @@ const Dashboard = React.memo(({ setIsLoggedIn, handleLogout, isGoogleMapsLoaded 
 
   const fetchAlertsByLocation = async () => {
     try {
-      const response = await fetch(`${API_URL}/alertas`, {
+      const response = await fetch(`${REACT_APP_API_URL}/alertas`, {
   credentials: "include",
 });
       const data = await response.json();

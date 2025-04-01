@@ -4,7 +4,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { GoogleMap, Marker } from "@react-google-maps/api";
 import Swal from "sweetalert2";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
@@ -46,7 +46,7 @@ function Alertas({ setIsLoggedIn, isGoogleMapsLoaded }) {
   useEffect(() => {
     const fetchAlertas = async () => {
       try {
-        const response = await fetch(`${API_URL}/alertas`, {
+        const response = await fetch(`${REACT_APP_API_URL}/alertas`, {
           method: "GET",
           credentials: "include",
         });
