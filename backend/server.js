@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const mysql = require('mysql');
+const mysql = require('mysql2');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -36,6 +36,7 @@ const db = mysql.createConnection({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
+  port: process.env.PORT || 3306, // Añade el puerto aquí
   multipleStatements: true,
 });
 
@@ -503,8 +504,11 @@ app.post('/viaje/asignar-carga', (req, res) => {
     return res.status(400).json({ message: "Faltan campos requeridos" });
   }
 
+  // Convertir fecha_entrega al formato MySQL
+  const fechaFormateada = new Date(fecha_entrega).toISOString().slice(0, 19).replace('T', ' ');
+
   const sql = 'CALL AsignarCargaAViaje(?, ?, ?, ?, ?, ?, @id_viaje_asignado); SELECT @id_viaje_asignado AS id_viaje;';
-  db.query(sql, [id_carga, origen_latitud, origen_longitud, destino_latitud, destino_longitud, fecha_entrega], (err, results) => {
+  db.query(sql, [id_carga, origen_latitud, origen_longitud, destino_latitud, destino_longitud, fechaFormateada], (err, results) => {
     if (err) {
       console.error("Error al asignar carga a viaje:", err);
       return res.status(500).json({ message: "Error al asignar carga", error: err.message });
