@@ -6,8 +6,7 @@ import { Autocomplete, useJsApiLoader } from "@react-google-maps/api";
 import { format } from "date-fns";
 import { Modal, Button, Form } from "react-bootstrap";
 
-
-const REACT_APP_API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000"; // Ya está definida, pero la usaremos
 
 function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const [cargas, setCargas] = useState([]);
@@ -47,7 +46,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchCargasSinViaje = async () => {
     try {
-      const response = await fetch(`${REACT_APP_API_URL}/carga/sin-viaje`, {
+      const response = await fetch(`${API_URL}/carga/sin-viaje`, { // Cambiado
         credentials: "include",
       });
       if (!response.ok) {
@@ -76,7 +75,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
 
   const fetchViajesActivos = async () => {
     try {
-      const response = await fetch(`${REACT_APP_API_URL}/vista_viajes_activos`, {
+      const response = await fetch(`${API_URL}/vista_viajes_activos`, { // Cambiado
         credentials: "include",
       });
       if (!response.ok) {
@@ -128,7 +127,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const handleCreateCarga = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${REACT_APP_API_URL}/carga`, {
+      const response = await fetch(`${API_URL}/carga`, { // Cambiado
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCarga),
@@ -167,7 +166,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
       fecha_entrega: selectedCarga.fecha_entrega,
     };
     try {
-      const response = await fetch(`${REACT_APP_API_URL}/viaje/asignar-carga`, {
+      const response = await fetch(`${API_URL}/viaje/asignar-carga`, { // Cambiado
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -252,7 +251,7 @@ function Viajes({ setIsLoggedIn, isGoogleMapsLoaded }) {
   const handleDetailsSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${REACT_APP_API_URL}/viaje/${selectedViaje.id_viaje}`, {
+      const response = await fetch(`${API_URL}/viaje/${selectedViaje.id_viaje}`, { // Cambiado
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ detalles_viaje: tripDetails }),
